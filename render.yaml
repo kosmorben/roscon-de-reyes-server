@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: roscon-de-reyes
+    runtime: python
+    plan: free
+    buildCommand: ""
+    startCommand: python server/roscon_online_server.py
+    envVars:
+      - key: HOST
+        value: 0.0.0.0

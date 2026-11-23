@@ -1,0 +1,47 @@
+[
+  {
+    "id": "futbol",
+    "title": "Fútbol",
+    "subtitle": "Liga, Mundiales y leyendas",
+    "icon": "⚽",
+    "accent": "#22e396",
+    "dataFile": "theme_futbol.json",
+    "targetRoscos": 10
+  },
+  {
+    "id": "entretenimiento",
+    "title": "Entretenimiento",
+    "subtitle": "Cine, música y espectáculos",
+    "icon": "🎬",
+    "accent": "#ff6b78",
+    "dataFile": "theme_entretenimiento.json",
+    "targetRoscos": 10
+  },
+  {
+    "id": "historia",
+    "title": "Historia y Geografía",
+    "subtitle": "Civilizaciones, países y viajes",
+    "icon": "🌍",
+    "accent": "#f5a623",
+    "dataFile": "theme_historia.json",
+    "targetRoscos": 10
+  },
+  {
+    "id": "ciencia",
+    "title": "Ciencia y Naturaleza",
+    "subtitle": "Espacio, animales y descubrimientos",
+    "icon": "🔬",
+    "accent": "#48d1fc",
+    "dataFile": "theme_ciencia.json",
+    "targetRoscos": 10
+  },
+  {
+    "id": "infantil",
+    "title": "Infantil",
+    "subtitle": "Divertido para niños y familia",
+    "icon": "🧸",
+    "accent": "#60a5fa",
+    "dataFile": "theme_infantil.json",
+    "targetRoscos": 10
+  }
+]

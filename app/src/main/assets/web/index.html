@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+  <title>Roscón de Reyes</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <!-- Fondo ilustrado navideño + nieve y luces en vivo -->
+  <div class="bg-image" aria-hidden="true"></div>
+  <canvas id="snowCanvas" class="fx-canvas fx-snow" aria-hidden="true"></canvas>
+
+  <!-- Toast flotante festivo para Premio del Rey / Truco del Haba / Online -->
+  <div id="surpriseToast" class="surprise-toast hidden" role="status"></div>
+
+  <!-- PANTALLA 0: SELECCIÓN DE TEMÁTICA (PRIMERA PANTALLA) -->
+  <main id="screenThemes" class="screen screen-themes active">
+    <div class="themes-header">
+      <div class="themes-brand">
+        <img src="roscon_cake.webp" alt="Roscón de Reyes" class="themes-mini-cake" />
+        <div>
+          <div class="pill-badge themes-badge">ELIGE TU TEMÁTICA</div>
+          <h1 class="themes-title">ROSCÓN DE REYES</h1>
+        </div>
+      </div>
+    </div>
+    <div class="themes-scroll">
+      <div id="themesGrid" class="themes-grid"></div>
+    </div>
+  </main>
+
+  <!-- PANTALLA 1: MODO DE JUEGO -->
+  <main id="screenSetup" class="screen screen-setup">
+    <div class="setup-wrap">
+      <div class="setup-theme-bar">
+        <button type="button" id="btnChangeTheme" class="top-pill">&larr; Temáticas</button>
+        <div id="activeThemePill" class="active-theme-pill">👑 Todo Mezclado</div>
+      </div>
+
+      <div class="hero-emblem">
+        <div class="fairy-ring" id="heroFairyRing"></div>
+        <img src="roscon_cake.webp" alt="Roscón de Reyes" class="hero-cake" />
+        <div class="hero-center-badge">A-Z</div>
+      </div>
+
+      <div class="pill-badge">ESPECIAL NAVIDAD &middot; 1 O 2 JUGADORES</div>
+      <h1 class="hero-title">ROSCÓN DE REYES</h1>
+
+      <section class="glass-card setup-card">
+        <div class="section-label">JUGADORES</div>
+        <div class="choice-row" id="playerCountRow">
+          <button type="button" class="choice-btn active" data-players="1">1 Jugador</button>
+          <button type="button" class="choice-btn" data-players="2">2 Jugadores</button>
+        </div>
+
+        <div id="twoPlayerModeWrap" class="hidden">
+          <div class="section-label">MODO 2 JUGADORES</div>
+          <div class="choice-row" id="twoPlayerModeRow">
+            <button type="button" class="choice-btn active" data-mode="online">
+              <strong>Online 1 vs 1</strong><span>Otro dispositivo</span>
+            </button>
+            <button type="button" class="choice-btn" data-mode="local">
+              <strong>Mismo móvil</strong><span>Por turnos</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="section-label">NIVEL DE DIFICULTAD</div>
+        <div class="choice-row" id="difficultyRow">
+          <button type="button" class="choice-btn active" data-diff="facil">
+            <strong>Fácil</strong><span>Sin reloj · 4 pistas</span>
+          </button>
+          <button type="button" class="choice-btn" data-diff="dificil">
+            <strong>Difícil</strong><span>3:00 min · 2 pistas</span>
+          </button>
+        </div>
+
+        <button type="button" id="btnStart" class="cta-gold">¡EMPEZAR PARTIDA!</button>
+      </section>
+    </div>
+  </main>
+
+  <!-- PANTALLA 1B: LOBBY ONLINE 1 VS 1 -->
+  <main id="screenOnlineLobby" class="screen screen-setup">
+    <div class="setup-wrap">
+      <div class="lobby-topbar">
+        <button type="button" id="btnLobbyBack" class="top-pill">&larr; Menú</button>
+        <div id="serverStatusPill" class="server-pill">Comprobando servidor...</div>
+      </div>
+
+      <div class="pill-badge">DUELO ONLINE 1 VS 1</div>
+      <h2 class="lobby-title">JUGAR ONLINE</h2>
+
+      <section class="glass-card setup-card">
+        <div class="section-label">TU NOMBRE</div>
+        <input id="onlineNameInput" class="online-input" type="text" maxlength="16" placeholder="Tu nombre (ej. Carlos)" autocomplete="off" />
+
+        <button type="button" id="btnFindMatch" class="cta-gold">BUSCAR RIVAL ALEATORIO</button>
+
+        <div class="lobby-divider"><span>o juega con un amigo</span></div>
+
+        <button type="button" id="btnCreateRoom" class="btn-secondary full-btn">CREAR SALA PRIVADA</button>
+
+        <div class="join-row">
+          <input id="joinCodeInput" class="online-input code-input" type="text" maxlength="4" placeholder="CÓDIGO" autocomplete="off" />
+          <button type="button" id="btnJoinRoom" class="btn-join">ENTRAR</button>
+        </div>
+
+        <div id="onlineWaitingBox" class="waiting-box hidden">
+          <div id="waitingCodeDisplay" class="waiting-code hidden"></div>
+          <div id="onlineStatusMsg" class="waiting-msg">Buscando rival...</div>
+          <button type="button" id="btnCancelOnline" class="top-pill top-pill-red">Cancelar espera</button>
+        </div>
+
+        <div id="onlineErrorMsg" class="online-error hidden"></div>
+
+        <div class="server-config-wrap">
+          <button type="button" id="btnToggleServer" class="link-subtle">Configurar servidor</button>
+          <div id="serverConfigBox" class="server-config-box hidden">
+            <input id="serverUrlInput" class="online-input server-input" type="url" placeholder="http://192.168.1.142:8765" autocomplete="off" />
+            <button type="button" id="btnSaveServer" class="top-pill">Guardar y probar</button>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+
+  <!-- PANTALLA 2: TABLERO DEL ROSCÓN -->
+  <main id="screenGame" class="screen screen-game">
+    <header class="topbar">
+      <button type="button" id="btnMenu" class="top-pill">Menú</button>
+      <div id="scoreboard" class="scoreboard"></div>
+      <div id="topProgress" class="top-progress">0/24</div>
+      <button type="button" id="btnFinish" class="top-pill top-pill-red">Fin</button>
+    </header>
+
+    <div class="game-scroll">
+      <div id="onlineTurnBanner" class="turn-banner hidden">TU TURNO</div>
+
+      <div class="wheel-stage" id="wheelStage">
+        <div class="wheel-halo"></div>
+        <div class="fairy-ring wheel-fairy-ring" id="wheelFairyRing"></div>
+        <img src="roscon_cake.webp" alt="Roscón de Reyes" class="wheel-cake" />
+        <div class="wheel-spotlight" id="wheelSpotlight"></div>
+        <div class="wheel-hub">
+          <div id="centerLetter" class="center-letter">A</div>
+          <div id="centerTimer" class="center-timer">03:00</div>
+        </div>
+        <div id="lettersRing" class="letters-ring"></div>
+      </div>
+
+      <section class="glass-card question-card" id="questionCard">
+        <div class="q-header-row">
+          <span id="modePill" class="mode-pill">EMPIEZA POR A</span>
+          <span id="streakPill" class="streak-pill"></span>
+          <button type="button" id="btnReplayAudio" class="btn-replay" title="Repetir pista">&#128266;</button>
+        </div>
+
+        <p id="clueText" class="clue-text">Cargando pista...</p>
+        <div id="wordMeta" class="word-meta">8 letras &middot; Vuelta 1 &middot; 24 pendientes</div>
+
+        <div class="slots-tray">
+          <div id="wordSlots" class="word-slots"></div>
+        </div>
+
+        <button type="button" id="btnVoice" class="btn-voice">
+          HABLAR &middot; Responde o di &laquo;Paso&raquo;
+        </button>
+
+        <!-- Solo visible en navegador de PC si no hay microfono nativo Android -->
+        <form id="webTextAnswerRow" class="web-answer-row hidden">
+          <input id="webAnswerInput" class="online-input web-answer-input" type="text" placeholder="Escribe respuesta o «paso»..." autocomplete="off" />
+          <button type="submit" class="btn-join">Enviar</button>
+        </form>
+
+        <button type="button" id="btnHint" class="btn-hint">Pista (3)</button>
+      </section>
+    </div>
+  </main>
+
+  <!-- PANTALLA 3: RESUMEN -->
+  <main id="screenSummary" class="screen screen-summary">
+    <div class="summary-wrap">
+      <div id="summaryBadge" class="pill-badge">FIN DE LA PARTIDA</div>
+      <h2 id="summaryTitle" class="summary-title">Resumen</h2>
+      <p id="summarySubtitle" class="summary-subtitle"></p>
+
+      <div id="summaryRanking" class="summary-ranking"></div>
+
+      <div class="summary-actions">
+        <button type="button" id="btnPlayAgain" class="cta-gold">Jugar otra vez</button>
+        <button type="button" id="btnBackMenu" class="btn-secondary">Menú</button>
+      </div>
+
+      <div class="section-label">REPASO COMPLETO DEL ROSCÓN</div>
+      <div id="summaryReview" class="summary-review"></div>
+    </div>
+  </main>
+
+  <!-- Fuegos artificiales y confeti navideño en primer plano -->
+  <canvas id="fxCanvas" class="fx-canvas fx-top" aria-hidden="true"></canvas>
+
+  <script src="app.js"></script>
+</body>
+</html>
