@@ -3,11 +3,13 @@ import os
 import random
 import re
 import string
+import tempfile
 import threading
 import time
 import unicodedata
 import urllib.parse
 import urllib.request
+import zipfile
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -18,6 +20,7 @@ DATA_DIR = BASE_DIR / "app" / "src" / "main" / "assets" / "data"
 DATA_FILE = DATA_DIR / "base_pack_es.json"
 MANIFEST_FILE = DATA_DIR / "themes_manifest.json"
 VOICE_DIR = BASE_DIR / "app" / "src" / "main" / "assets" / "voice"
+VOICE_PACK_ZIP = BASE_DIR / "voice_pack.zip"
 
 ROSCO_LETTERS = [
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "L", "M",
@@ -104,7 +107,41 @@ def load_theme_by_letter(theme_id: str) -> dict:
     return by_l
 
 
-ALL_QUESTIONS = json.loads(DATA_FILE.read_text(encoding="utf-8")) if DATA_FILE.exists() else []
+def ensure_voice_pack():
+    global VOICE_DIR
+    existing = sum(1 for p in VOICE_DIR.glob("*.ogg")) if VOICE_DIR.exists() else 0
+    if existing >= 800 or not VOICE_PACK_ZIP.exists():
+        return
+    for target_dir in (VOICE_DIR, Path(tempfile.gettempdir()) / "roscon_voice"):
+        try:
+            target_dir.mkdir(parents=True, exist_ok=True)
+            with zipfile.ZipFile(VOICE_PACK_ZIP, "r") as zf:
+                for info in zf.infolist():
+                    if not info.is_dir():
+                        fname = Path(info.filename).name
+                        if fname.lower().endswith((".ogg", ".mp3")):
+                            (target_dir / fname).write_bytes(zf.read(info))
+            VOICE_DIR = target_dir
+            print(f"Extracted Fenrir voice pack to {VOICE_DIR}", flush=True)
+            return
+        except Exception as exc:
+            print(f"Voice pack extract fallback ({target_dir}): {exc}", flush=True)
+
+
+ensure_voice_pack()
+
+
+def _load_all_questions() -> list:
+    if DATA_FILE.exists():
+        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    merged = []
+    for tid in THEMES_MAP:
+        for pool in load_theme_by_letter(tid).values():
+            merged.extend(pool)
+    return merged
+
+
+ALL_QUESTIONS = _load_all_questions()
 
 
 def get_voiced_keys() -> set:
@@ -561,12 +598,12 @@ class RosconHandler(BaseHTTPRequestHandler):
         if args and "/api/" in str(args[0]) and "/state?" not in str(args[0]) and "/status?" not in str(args[0]):
             print(f"[{time.strftime('%H:%M:%S')}] {self.address_string()} {fmt % args}", flush=True)
 
-    def send_cors_headers(self):
+    def send_cors_headers(self, cache_control: str = "no-store"):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Range")
         self.send_header("Access-Control-Allow-Private-Network", "true")
-        self.send_header("Cache-Control", "no-store")
+        self.send_header("Cache-Control", cache_control)
 
     def send_json(self, obj: dict, status: int = 200):
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -596,11 +633,38 @@ class RosconHandler(BaseHTTPRequestHandler):
             self.send_json({"ok": False, "error": "Not found"}, 404)
             return
         data = path.read_bytes()
-        mime = MIME_TYPES.get(path.suffix.lower(), "application/octet-stream")
+        total = len(data)
+        ext = path.suffix.lower()
+        mime = MIME_TYPES.get(ext, "application/octet-stream")
+        cc = "public, max-age=86400" if ext in (".ogg", ".mp3", ".wav", ".webp", ".png", ".jpg") else "no-store"
+
+        range_hdr = self.headers.get("Range")
+        if range_hdr and range_hdr.startswith("bytes="):
+            try:
+                spec = range_hdr.split("=", 1)[1].split(",")[0].strip()
+                s_str, e_str = spec.split("-", 1)
+                start = int(s_str) if s_str else 0
+                end = int(e_str) if e_str else total - 1
+                start = max(0, min(start, total - 1))
+                end = max(start, min(end, total - 1))
+                chunk = data[start : end + 1]
+                self.send_response(206)
+                self.send_cors_headers(cc)
+                self.send_header("Content-Type", mime)
+                self.send_header("Accept-Ranges", "bytes")
+                self.send_header("Content-Range", f"bytes {start}-{end}/{total}")
+                self.send_header("Content-Length", str(len(chunk)))
+                self.end_headers()
+                self.wfile.write(chunk)
+                return
+            except Exception:
+                pass
+
         self.send_response(200)
-        self.send_cors_headers()
+        self.send_cors_headers(cc)
         self.send_header("Content-Type", mime)
-        self.send_header("Content-Length", str(len(data)))
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(total))
         self.end_headers()
         self.wfile.write(data)
 
