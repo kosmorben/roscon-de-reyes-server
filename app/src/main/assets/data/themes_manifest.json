@@ -1,5 +1,14 @@
 [
   {
+    "id": "navidad",
+    "title": "Especial Navidad",
+    "subtitle": "Reyes Magos, dulces y tradiciones",
+    "icon": "🎄",
+    "accent": "#ffd54f",
+    "dataFile": "theme_navidad.json",
+    "targetRoscos": 10
+  },
+  {
     "id": "futbol",
     "title": "Fútbol",
     "subtitle": "Liga, Mundiales y leyendas",
