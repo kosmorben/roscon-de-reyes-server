@@ -1493,10 +1493,10 @@ html, body {
 }
 
 .daily-texts strong {
-  font-size: 13.5px;
+  font-size: 14.5px;
   font-weight: 900;
   color: var(--gold-bright);
-  letter-spacing: 0.4px;
+  letter-spacing: 0.6px;
 }
 
 .daily-texts small {

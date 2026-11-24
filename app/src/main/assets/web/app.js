@@ -925,14 +925,7 @@
       vipBtn.textContent = isVip ? "👑 VIP Activo" : "👑 VIP";
     }
     const meta = loadDailyMeta();
-    const today = getTodayDateStr();
-    const sub = document.getElementById("dailyBtnSub");
     const stBadge = document.getElementById("dailyStreakBadge");
-    if (sub) {
-      sub.textContent = meta.lastCompletedDate === today
-        ? `✅ Hoy: ${meta.bestTodayCorrect || 0}/24 (${meta.bestTodayScore || 0} pts) · Ver Ranking`
-        : "24 letras iguales hoy en todo el mundo · Ranking en vivo";
-    }
     if (stBadge) {
       const st = meta.streak || 0;
       stBadge.classList.toggle("hidden", st <= 0);
