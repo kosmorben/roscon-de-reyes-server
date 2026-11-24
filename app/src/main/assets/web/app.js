@@ -26,6 +26,81 @@
     return normalizeSpanish(raw).replace(/ñ/g, "n");
   }
 
+  // Tolerancia fonética española (seseo/ceceo c-z-s, b/v, yeísmo ll/y, h muda)
+  function phoneticSpanish(raw) {
+    let s = normalizeLooseEnye(raw);
+    if (!s) return "";
+    s = s
+      .replace(/^h+/, "")
+      .replace(/ll/g, "y")
+      .replace(/v/g, "b")
+      .replace(/qu/g, "k")
+      .replace(/c([ei])/g, "s$1")
+      .replace(/z/g, "s")
+      .replace(/c/g, "k")
+      .replace(/(.)\1+/g, "$1");
+    return s;
+  }
+
+  function editDistance(a, b) {
+    if (a === b) return 0;
+    const m = a.length, n = b.length;
+    if (Math.abs(m - n) > 2) return 99;
+    const dp = Array.from({ length: m + 1 }, (_, i) => i);
+    for (let j = 1; j <= n; j++) {
+      let prev = dp[0];
+      dp[0] = j;
+      for (let i = 1; i <= m; i++) {
+        const tmp = dp[i];
+        dp[i] = a[i - 1] === b[j - 1] ? prev : 1 + Math.min(prev, dp[i], dp[i - 1]);
+        prev = tmp;
+      }
+    }
+    return dp[m];
+  }
+
+  function isSmartSpanishMatch(spokenRaw, q) {
+    const cleaned = cleanSpokenSpanish(spokenRaw);
+    if (!cleaned) return false;
+    const compact = cleaned.replace(/\s+/g, "");
+    const parts = cleaned.split(" ");
+    const lastWord = parts[parts.length - 1] || "";
+    const candidates = [cleaned, compact, lastWord].filter(Boolean);
+
+    const targets = [q.Answer, ...(q.AcceptedVariants || [])];
+    const reqLetter = normalizeSpanish(q.Letter);
+
+    for (const tgt of targets) {
+      const tn = normalizeSpanish(tgt);
+      const tl = normalizeLooseEnye(tgt);
+      const tp = phoneticSpanish(tgt);
+      for (const c of candidates) {
+        if (c === tn || normalizeLooseEnye(c) === tl) return true;
+        // Singular/plural muy común en voz (ej. juguete / juguetes)
+        if (tn.length >= 4 && (c === tn + "s" || c === tn + "es" || tn === c + "s" || tn === c + "es")) {
+          return true;
+        }
+        const cp = phoneticSpanish(c);
+        if (cp.length >= 4 && cp === tp) {
+          // Si la letra exigida es Ñ, exige que al menos suene similar pero no confunda otra letra inicial
+          if (q.Mode === "StartsWith" && reqLetter !== "ñ" && c[0] !== tn[0]) {
+            const allowBV = (tn[0] === "b" || tn[0] === "v") && (c[0] === "b" || c[0] === "v");
+            const allowH = tn[0] === "h" && c[0] === tn[1];
+            const allowCZS = ("czs".includes(tn[0])) && ("czs".includes(c[0]));
+            if (!allowBV && !allowH && !allowCZS) continue;
+          }
+          return true;
+        }
+        // Tolerancia de 1 letra de micrófono en palabras largas (>= 6 letras)
+        if (tn.length >= 6 && c.length >= 5 && editDistance(c, tn) <= 1) {
+          if (q.Mode === "StartsWith" && c[0] === tn[0]) return true;
+          if (q.Mode === "Contains" && c.includes(reqLetter)) return true;
+        }
+      }
+    }
+    return false;
+  }
+
   function cleanSpokenSpanish(raw) {
     let w = normalizeSpanish(raw);
     const prefixes = [
@@ -296,13 +371,14 @@
 
   // ==================== THEMES + QUESTION BANK + PERSISTENT NO-REPEAT ====================
   let themesList = [
+    { id: "navidad", title: "Especial Navidad", subtitle: "Reyes Magos, dulces y tradiciones", icon: "🎄", accent: "#ffd54f", dataFile: "theme_navidad.json" },
     { id: "futbol", title: "Fútbol", subtitle: "Liga, Mundiales y leyendas", icon: "⚽", accent: "#22e396", dataFile: "theme_futbol.json" },
     { id: "entretenimiento", title: "Entretenimiento", subtitle: "Cine, música y espectáculos", icon: "🎬", accent: "#ff6b78", dataFile: "theme_entretenimiento.json" },
     { id: "historia", title: "Historia y Geografía", subtitle: "Civilizaciones, países y viajes", icon: "🌍", accent: "#f5a623", dataFile: "theme_historia.json" },
     { id: "ciencia", title: "Ciencia y Naturaleza", subtitle: "Espacio, animales y descubrimientos", icon: "🔬", accent: "#48d1fc", dataFile: "theme_ciencia.json" },
     { id: "infantil", title: "Infantil", subtitle: "Divertido para niños y familia", icon: "🧸", accent: "#60a5fa", dataFile: "theme_infantil.json" }
   ];
-  let selectedThemeId = "futbol";
+  let selectedThemeId = "navidad";
   const themeBanksCache = new Map();
   let savedThemeExtras = {}; // themeId -> array of downloaded extra questions (unlimited mode!)
   let allQuestions = [];
@@ -321,17 +397,27 @@
     return String(rawId).replace(/[Ññ]/g, "ENYE").replace(/[^A-Za-z0-9_-]/g, "");
   }
 
+  function addKeyAndAnswer(k) {
+    if (!k) return;
+    playedKeys.add(k);
+    const bar = k.indexOf("|");
+    if (bar > 0 && bar < 4) {
+      const ans = k.slice(bar + 1).trim();
+      if (ans) playedKeys.add(`ans:${ans}`);
+    }
+  }
+
   function loadPlayedHistory() {
     try {
       if (window.RosconAndroid && window.RosconAndroid.loadPlayedHistoryJson) {
         const diskSaved = JSON.parse(window.RosconAndroid.loadPlayedHistoryJson() || "[]");
         if (Array.isArray(diskSaved)) {
-          for (const k of diskSaved) playedKeys.add(k);
+          for (const k of diskSaved) addKeyAndAnswer(k);
         }
       }
       const saved = JSON.parse(localStorage.getItem(PLAYED_STORAGE_KEY) || "[]");
       if (Array.isArray(saved)) {
-        for (const k of saved) playedKeys.add(k);
+        for (const k of saved) addKeyAndAnswer(k);
       }
     } catch (_) {}
   }
@@ -350,6 +436,74 @@
 
   function questionKey(q) {
     return `${q.Letter}|${normalizeSpanish(q.Answer)}`;
+  }
+
+  function isQuestionPlayed(q) {
+    if (!q || !q.Answer) return true;
+    const normAns = normalizeSpanish(q.Answer);
+    if (playedKeys.has(`${q.Letter}|${normAns}`) || playedKeys.has(`ans:${normAns}`)) return true;
+    if (q.Id && playedKeys.has(`id:${q.Id}`)) return true;
+    if (q.Clue && playedKeys.has(`clue:${normalizeSpanish(q.Clue).slice(0, 64)}`)) return true;
+    for (const v of (q.AcceptedVariants || [])) {
+      const nv = normalizeSpanish(v);
+      if (nv && playedKeys.has(`ans:${nv}`)) return true;
+    }
+    return false;
+  }
+
+  function markQuestionPlayed(q) {
+    if (!q || !q.Answer) return false;
+    const before = playedKeys.size;
+    const normAns = normalizeSpanish(q.Answer);
+    playedKeys.add(`${q.Letter}|${normAns}`);
+    playedKeys.add(`ans:${normAns}`);
+    if (q.Id) playedKeys.add(`id:${q.Id}`);
+    if (q.Clue) playedKeys.add(`clue:${normalizeSpanish(q.Clue).slice(0, 64)}`);
+    for (const v of (q.AcceptedVariants || [])) {
+      const nv = normalizeSpanish(v);
+      if (nv) playedKeys.add(`ans:${nv}`);
+    }
+    return playedKeys.size !== before;
+  }
+
+  const globalReserveByLetter = {};
+  for (const l of ROSCO_LETTERS) globalReserveByLetter[l] = [];
+  let globalReserveLoaded = false;
+
+  async function readDataFileRows(fileName) {
+    try {
+      if (window.RosconAndroid && window.RosconAndroid.loadDataFileJson) {
+        const arr = JSON.parse(window.RosconAndroid.loadDataFileJson(fileName) || "[]");
+        return Array.isArray(arr) ? arr : [];
+      }
+      const res = await fetch(`data/${fileName}`);
+      if (res.ok) {
+        const arr = await res.json();
+        return Array.isArray(arr) ? arr : [];
+      }
+    } catch (_) {}
+    return [];
+  }
+
+  async function ensureGlobalReserveLoaded() {
+    if (globalReserveLoaded) return;
+    globalReserveLoaded = true;
+    const seenAns = new Set();
+    const files = [
+      ...themesList.map(t => t.dataFile).filter(Boolean),
+      "base_pack_es.json"
+    ];
+    for (const fn of files) {
+      const rows = await readDataFileRows(fn);
+      for (const q of rows) {
+        if (!q || !q.Letter || !q.Answer || !q.Clue || q.Clue.length > 108) continue;
+        if (!globalReserveByLetter[q.Letter]) continue;
+        const na = normalizeSpanish(q.Answer);
+        if (!na || seenAns.has(`${q.Letter}|${na}`)) continue;
+        seenAns.add(`${q.Letter}|${na}`);
+        globalReserveByLetter[q.Letter].push(q);
+      }
+    }
   }
 
   function cleanQuestionArray(rows) {
@@ -510,6 +664,7 @@
     renderThemesGrid();
     updateThemePill();
     await loadThemeBank(selectedThemeId);
+    ensureGlobalReserveLoaded();
   }
 
   function updateBankInfo(customMsg) {
@@ -635,10 +790,163 @@
 
   let webAudioEl = null;
   let webRecognition = null;
+  let isVip = false;
+  let autoMicEnabled = false;
+  let manualKeyboardOpen = false;
+  let bgMusicEnabled = true;
+  let pendingHabaContext = null;
+
+  const VIP_STORAGE_KEY = "roscon_vip_v2";
+  const DAILY_META_KEY = "roscon_daily_meta_v2";
+  const BGM_STORAGE_KEY = "roscon_bgm_v2";
+  try {
+    isVip = localStorage.getItem(VIP_STORAGE_KEY) === "1";
+    autoMicEnabled = localStorage.getItem("roscon_automic_v2") === "1";
+    bgMusicEnabled = localStorage.getItem(BGM_STORAGE_KEY) !== "0";
+  } catch (_) {}
+
+  // Música navideña libre de derechos en bucle continuo (Deck the Halls + Jingle Bells + We Wish You + Noche de Paz)
+  let bgmAudio = null;
+  let webClueSpeaking = false;
+
+  function syncMusicButtons() {
+    const btn = document.getElementById("btnMusicToggle");
+    if (btn) btn.textContent = bgMusicEnabled ? "🎵 Música: Sí" : "🔇 Música: No";
+    const inGameBtn = document.getElementById("btnMusicInGame");
+    if (inGameBtn) {
+      inGameBtn.classList.toggle("active", bgMusicEnabled);
+      inGameBtn.textContent = bgMusicEnabled ? "🎵" : "🔇";
+    }
+  }
+
+  function updateMusicEngine() {
+    syncMusicButtons();
+    try { localStorage.setItem(BGM_STORAGE_KEY, bgMusicEnabled ? "1" : "0"); } catch (_) {}
+
+    const mode = game.listening ? "mic" : (game.active ? "game" : "menu");
+    if (window.RosconAndroid && window.RosconAndroid.setMusicEnabled) {
+      window.RosconAndroid.setMusicEnabled(bgMusicEnabled);
+      if (window.RosconAndroid.setMusicDuckMode) {
+        window.RosconAndroid.setMusicDuckMode(mode);
+      }
+      return;
+    }
+
+    if (!bgMusicEnabled) {
+      if (bgmAudio) {
+        try { bgmAudio.pause(); } catch (_) {}
+      }
+      return;
+    }
+
+    if (!bgmAudio) {
+      bgmAudio = new Audio("christmas_bgm.ogg");
+      bgmAudio.loop = true;
+      bgmAudio.preload = "auto";
+    }
+    if (game.listening) {
+      bgmAudio.volume = 0.03;
+    } else if (webClueSpeaking) {
+      bgmAudio.volume = 0.09;
+    } else if (game.active) {
+      bgmAudio.volume = 0.16;
+    } else {
+      bgmAudio.volume = 0.28;
+    }
+    if (bgmAudio.paused && !document.hidden) {
+      bgmAudio.play().catch(() => {});
+    }
+  }
+
+  function unlockWebBgmOnce() {
+    if (bgMusicEnabled && !window.RosconAndroid) {
+      updateMusicEngine();
+    }
+  }
+  window.addEventListener("pointerdown", unlockWebBgmOnce, { passive: true });
+  window.addEventListener("keydown", unlockWebBgmOnce, { passive: true });
+  document.addEventListener("visibilitychange", () => {
+    if (!bgmAudio) return;
+    if (document.hidden) {
+      try { bgmAudio.pause(); } catch (_) {}
+    } else if (bgMusicEnabled) {
+      updateMusicEngine();
+    }
+  });
+
+  let ceremonyTimer = null;
+  function showCeremonyOverlay(kind, title, sub) {
+    const ov = document.getElementById("ceremonyOverlay");
+    const card = document.getElementById("ceremonyCard");
+    if (!ov || !card) return;
+    document.getElementById("ceremonyEmoji").textContent = kind === "king" ? "👑" : (kind === "shield" ? "🛡️" : "🫘");
+    document.getElementById("ceremonyTitle").textContent = title;
+    document.getElementById("ceremonySub").textContent = sub;
+    card.classList.toggle("haba-style", kind === "haba");
+    ov.classList.remove("hidden");
+    if (ceremonyTimer) clearTimeout(ceremonyTimer);
+    ceremonyTimer = setTimeout(() => ov.classList.add("hidden"), 2300);
+  }
+
+  function getTodayDateStr() {
+    const d = new Date(Date.now() + 3600 * 1000);
+    return d.toISOString().slice(0, 10);
+  }
+
+  function loadDailyMeta() {
+    try {
+      return JSON.parse(localStorage.getItem(DAILY_META_KEY) || "{}") || {};
+    } catch (_) {
+      return {};
+    }
+  }
+
+  function saveDailyCompletion(dateStr, correct, score) {
+    const meta = loadDailyMeta();
+    if (meta.lastCompletedDate === dateStr) {
+      if (score > (meta.bestTodayScore || 0)) meta.bestTodayScore = score;
+      meta.bestTodayCorrect = Math.max(correct, meta.bestTodayCorrect || 0);
+    } else {
+      const yesterday = new Date(Date.parse(dateStr + "T12:00:00Z") - 86400000).toISOString().slice(0, 10);
+      meta.streak = (meta.lastCompletedDate === yesterday ? (meta.streak || 0) : 0) + 1;
+      meta.lastCompletedDate = dateStr;
+      meta.bestTodayScore = score;
+      meta.bestTodayCorrect = correct;
+    }
+    try { localStorage.setItem(DAILY_META_KEY, JSON.stringify(meta)); } catch (_) {}
+    refreshWelcomeBadges();
+    return meta;
+  }
+
+  function refreshWelcomeBadges() {
+    const vipBtn = document.getElementById("btnOpenVip");
+    if (vipBtn) {
+      vipBtn.classList.toggle("is-vip", isVip);
+      vipBtn.textContent = isVip ? "👑 VIP Activo" : "👑 VIP";
+    }
+    const meta = loadDailyMeta();
+    const today = getTodayDateStr();
+    const sub = document.getElementById("dailyBtnSub");
+    const stBadge = document.getElementById("dailyStreakBadge");
+    if (sub) {
+      sub.textContent = meta.lastCompletedDate === today
+        ? `✅ Hoy: ${meta.bestTodayCorrect || 0}/24 (${meta.bestTodayScore || 0} pts) · Ver Ranking`
+        : "24 letras iguales hoy en todo el mundo · Ranking en vivo";
+    }
+    if (stBadge) {
+      const st = meta.streak || 0;
+      stBadge.classList.toggle("hidden", st <= 0);
+      stBadge.textContent = `🔥 ${st}d`;
+    }
+  }
 
   const game = {
     active: false,
     isOnline: false,
+    isDaily: false,
+    dailyDate: "",
+    startedAtMs: 0,
+    habaShieldUsed: false,
     items: [],
     players: [],
     currentIndex: 0,
@@ -675,6 +983,18 @@
     for (const s of document.querySelectorAll(".screen")) {
       s.classList.toggle("active", s.id === id);
     }
+    updateMusicEngine();
+  }
+
+  function pickBestFromPool(pool, targetDiff) {
+    const freshDiff = pool.filter(q => {
+      const d = (q.Difficulty || "facil").toLowerCase();
+      return targetDiff === "dificil" ? (d === "dificil" || d === "normal") : d === "facil";
+    });
+    const diffPool = freshDiff.length > 0 ? freshDiff : pool;
+    const freshVoiced = diffPool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
+    const candidates = freshVoiced.length > 0 ? freshVoiced : diffPool;
+    return candidates[Math.floor(Math.random() * candidates.length)];
   }
 
   function buildRosco24() {
@@ -683,62 +1003,97 @@
     for (const q of allQuestions) {
       if (byLetter[q.Letter]) byLetter[q.Letter].push(q);
     }
+    for (const q of extraQuestions) {
+      if (byLetter[q.Letter]) byLetter[q.Letter].push(q);
+    }
+
     const chosen = [];
+    const usedAnswersThisRosco = new Set();
+    const usedCluesThisRosco = new Set();
     let lowReserve = false;
     const targetDiff = selectedDiff === "dificil" ? "dificil" : "facil";
 
-    for (const l of ROSCO_LETTERS) {
-      const pool = byLetter[l];
-      if (!pool || pool.length === 0) continue;
-      let fresh = pool.filter(q => !playedKeys.has(questionKey(q)));
-      if (fresh.length <= 3) lowReserve = true;
-      if (fresh.length === 0) {
-        // Solo si se agotaron TODAS las preguntas locales y offline de esa letra
-        for (const q of pool) playedKeys.delete(questionKey(q));
-        fresh = pool;
+    const canUse = (q) => {
+      if (!q || !q.Answer || !q.Clue) return false;
+      if (isQuestionPlayed(q)) return false;
+      const na = normalizeSpanish(q.Answer);
+      const nc = normalizeSpanish(q.Clue).slice(0, 64);
+      if (!na || usedAnswersThisRosco.has(na) || usedCluesThisRosco.has(nc)) return false;
+      for (const v of (q.AcceptedVariants || [])) {
+        const nv = normalizeSpanish(v);
+        if (nv && usedAnswersThisRosco.has(nv)) return false;
       }
-      // Filtra por el nivel de dificultad elegido (facil / dificil) si hay preguntas sin jugar de ese nivel
-      const freshDiff = fresh.filter(q => {
-        const d = (q.Difficulty || "facil").toLowerCase();
-        return targetDiff === "dificil" ? (d === "dificil" || d === "normal") : d === "facil";
-      });
-      const diffPool = freshDiff.length > 0 ? freshDiff : fresh;
-      const freshVoiced = diffPool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
-      const candidates = freshVoiced.length > 0 ? freshVoiced : diffPool;
-      const pick = candidates[Math.floor(Math.random() * candidates.length)];
-      playedKeys.add(questionKey(pick));
+      return true;
+    };
+
+    for (const l of ROSCO_LETTERS) {
+      const themePool = byLetter[l] || [];
+      let fresh = themePool.filter(canUse);
+      if (fresh.length <= 3) lowReserve = true;
+
+      // Si se terminan las preguntas nuevas de esa letra en esta temática, NUNCA repite:
+      // pasa automáticamente a la reserva global de 5.800+ preguntas verificadas (priorizando locución Fenrir)
+      if (fresh.length === 0) {
+        const globalPool = globalReserveByLetter[l] || [];
+        const globalVoiced = globalPool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)) && canUse(q));
+        fresh = globalVoiced.length > 0 ? globalVoiced : globalPool.filter(canUse);
+      }
+
+      if (fresh.length === 0) {
+        // Caso extremo tras más de 240 roscos completos (~5.800 palabras únicas jugadas): evita repetir dentro del mismo rosco
+        const emergencyPool = (globalReserveByLetter[l] && globalReserveByLetter[l].length > 0) ? globalReserveByLetter[l] : themePool;
+        fresh = emergencyPool.filter(q => q && !usedAnswersThisRosco.has(normalizeSpanish(q.Answer)));
+      }
+      if (fresh.length === 0) continue;
+
+      const pick = pickBestFromPool(fresh, targetDiff);
+      markQuestionPlayed(pick);
+      usedAnswersThisRosco.add(normalizeSpanish(pick.Answer));
+      usedCluesThisRosco.add(normalizeSpanish(pick.Clue).slice(0, 64));
+      for (const v of (pick.AcceptedVariants || [])) {
+        const nv = normalizeSpanish(v);
+        if (nv) usedAnswersThisRosco.add(nv);
+      }
       chosen.push(pick);
     }
+
     savePlayedHistory();
-    // Modo preguntas ilimitadas: si queda poca reserva sin jugar, descarga nuevas preguntas verificadas en segundo plano!
+    // Modo preguntas ilimitadas: si queda poca reserva temática sin jugar, descarga nuevas preguntas verificadas en segundo plano
     if (lowReserve) {
       replenishThemeQuestions(selectedThemeId, targetDiff);
+      harvestUnlimitedWikipedia(35);
     }
     return chosen;
   }
 
-  function startNewGame() {
+  async function startNewGame() {
     if (selectedPlayers === 2 && selectedTwoPlayerMode === "online") {
       openOnlineLobby();
       return;
     }
     leaveOnlineRoom(false);
+    await ensureGlobalReserveLoaded();
     const rosco = buildRosco24();
     if (rosco.length === 0) return;
 
     const cfg = DIFF_CONFIG[selectedDiff] || DIFF_CONFIG.facil;
+    const vipBonusHints = isVip ? 2 : 0;
     game.isOnline = false;
+    game.isDaily = false;
+    game.dailyDate = "";
+    game.startedAtMs = Date.now();
+    game.habaShieldUsed = false;
     game.players = [];
     for (let i = 0; i < selectedPlayers; i++) {
       game.players.push({
         id: i,
-        name: `Jugador ${i + 1}`,
+        name: isVip && i === 0 ? "👑 Jugador 1" : `Jugador ${i + 1}`,
         score: 0,
         correct: 0,
         wrong: 0,
         streak: 0,
         bestStreak: 0,
-        hintsLeft: cfg.hints,
+        hintsLeft: cfg.hints + vipBonusHints,
         foundKing: false,
         foundHaba: false
       });
@@ -848,6 +1203,7 @@
   }
 
   function stopAllSpeech() {
+    webClueSpeaking = false;
     if (window.RosconAndroid && window.RosconAndroid.stopSpeaking) {
       window.RosconAndroid.stopSpeaking();
     }
@@ -858,7 +1214,29 @@
     if (window.speechSynthesis) {
       try { window.speechSynthesis.cancel(); } catch (_) {}
     }
+    updateMusicEngine();
   }
+
+  let autoMicTimer = null;
+  function maybeAutoStartMic() {
+    if (autoMicTimer) clearTimeout(autoMicTimer);
+    if (!autoMicEnabled || !game.active || !isMyActiveTurn() || game.listening) return;
+    const habaModal = document.getElementById("habaShieldModal");
+    if (habaModal && !habaModal.classList.contains("hidden")) return;
+    autoMicTimer = setTimeout(() => {
+      if (!autoMicEnabled || !game.active || !isMyActiveTurn() || game.listening) return;
+      SFX.mic();
+      if (window.RosconAndroid && window.RosconAndroid.startListening) {
+        window.RosconAndroid.startListening();
+      } else {
+        toggleWebSpeechRecognition();
+      }
+    }, 220);
+  }
+
+  window.onAndroidClueFinished = () => {
+    maybeAutoStartMic();
+  };
 
   function speakCurrentClue(force = false) {
     if (!game.active) return;
@@ -882,14 +1260,34 @@
     const safeKey = sanitizeVoiceKey(item.q.Id);
     const audio = new Audio(`voice/${safeKey}.ogg`);
     webAudioEl = audio;
+    webClueSpeaking = true;
+    updateMusicEngine();
+    audio.onended = () => {
+      if (webAudioEl === audio) {
+        webClueSpeaking = false;
+        updateMusicEngine();
+        maybeAutoStartMic();
+      }
+    };
     audio.play().catch(() => {
       if (window.speechSynthesis) {
         try {
           const u = new SpeechSynthesisUtterance(intro);
           u.lang = "es-ES";
           u.rate = 1.1;
+          u.onend = () => {
+            webClueSpeaking = false;
+            updateMusicEngine();
+            maybeAutoStartMic();
+          };
           window.speechSynthesis.speak(u);
-        } catch (_) {}
+        } catch (_) {
+          webClueSpeaking = false;
+          updateMusicEngine();
+        }
+      } else {
+        webClueSpeaking = false;
+        updateMusicEngine();
       }
     });
   }
@@ -983,12 +1381,33 @@
     const myTurn = isMyActiveTurn();
     const myPlayerObj = game.isOnline && game.players[online.mySeat] ? game.players[online.mySeat] : player;
     const hintBtn = document.getElementById("btnHint");
-    hintBtn.textContent = `Pista (${myPlayerObj.hintsLeft})`;
-    hintBtn.disabled = !myTurn || myPlayerObj.hintsLeft <= 0;
+    const canOfferRewardedHints = !game.isOnline && !isVip && selectedThemeId !== "infantil" && myPlayerObj.hintsLeft <= 0;
+    hintBtn.classList.toggle("reward-mode", canOfferRewardedHints);
+    if (canOfferRewardedHints) {
+      hintBtn.textContent = "🎬 +2 Pistas Gratis";
+      hintBtn.disabled = !myTurn;
+    } else {
+      hintBtn.textContent = `💡 Pista (${myPlayerObj.hintsLeft})`;
+      hintBtn.disabled = !myTurn || myPlayerObj.hintsLeft <= 0;
+    }
+
+    const passBtn = document.getElementById("btnPassQuick");
+    if (passBtn) passBtn.disabled = !myTurn;
+
+    const autoBtn = document.getElementById("btnAutoMic");
+    if (autoBtn) {
+      autoBtn.classList.toggle("active", autoMicEnabled);
+      autoBtn.textContent = autoMicEnabled ? "🎙️ Auto: Sí" : "🎙️ Auto: No";
+    }
+
+    const typeBtn = document.getElementById("btnToggleType");
+    if (typeBtn) {
+      typeBtn.classList.toggle("active", manualKeyboardOpen || !window.RosconAndroid);
+    }
 
     const webRow = document.getElementById("webTextAnswerRow");
     if (webRow) {
-      const showWebInput = !window.RosconAndroid && myTurn;
+      const showWebInput = (!window.RosconAndroid || manualKeyboardOpen) && myTurn;
       webRow.classList.toggle("hidden", !showWebInput);
     }
 
@@ -997,6 +1416,7 @@
   }
 
   function updateVoiceButton() {
+    updateMusicEngine();
     const btn = document.getElementById("btnVoice");
     if (!btn) return;
     const myTurn = isMyActiveTurn();
@@ -1004,11 +1424,11 @@
     btn.classList.toggle("listening", myTurn && game.listening);
     if (!myTurn && game.isOnline) {
       const activeP = game.players[game.currentPlayerIndex];
-      btn.textContent = `ESPERANDO A ${activeP ? activeP.name.toUpperCase() : "RIVAL"}...`;
+      btn.textContent = `⏳ TURNO DE ${activeP ? activeP.name.toUpperCase() : "RIVAL"}`;
     } else {
       btn.textContent = game.listening
-        ? "ESCUCHANDO... (Toca para parar)"
-        : "HABLAR · Responde o di «Paso»";
+        ? "🔴 ESCUCHANDO... (Toca para parar)"
+        : "🎤 HABLAR · Responde o di «Paso»";
     }
   }
 
@@ -1039,6 +1459,15 @@
     renderGame();
   }
 
+  function requestRewardedLifeline(kind) {
+    if (window.RosconAndroid && window.RosconAndroid.showRewardedLifeline) {
+      window.RosconAndroid.showRewardedLifeline(kind);
+    } else {
+      // En navegador web concede el comodín directo para poder probar la experiencia
+      window.onAndroidRewardGranted(kind);
+    }
+  }
+
   function useHint() {
     if (!game.active || !isMyActiveTurn()) return;
     if (game.isOnline) {
@@ -1047,7 +1476,14 @@
     }
     const item = game.items[game.currentIndex];
     const player = game.players[game.currentPlayerIndex];
-    if (!item || !player || player.hintsLeft <= 0) return;
+    if (!item || !player) return;
+
+    if (player.hintsLeft <= 0) {
+      if (!isVip && selectedThemeId !== "infantil") {
+        requestRewardedLifeline("hints");
+      }
+      return;
+    }
 
     const hidden = [];
     for (let i = 0; i < item.q.Answer.length; i++) {
@@ -1064,6 +1500,7 @@
 
   function passWord() {
     if (!game.active || !isMyActiveTurn()) return;
+    if (autoMicTimer) clearTimeout(autoMicTimer);
     if (game.isOnline) {
       sendOnlineAction("pass", {});
       return;
@@ -1076,8 +1513,35 @@
     advanceTurn(true);
   }
 
+  function finalizeHabaChoice(shielded) {
+    const ctx = pendingHabaContext;
+    pendingHabaContext = null;
+    document.getElementById("habaShieldModal").classList.add("hidden");
+    if (!ctx || !game.active) return;
+
+    const { player, letter, passPlayerAfter, basePts } = ctx;
+    if (shielded) {
+      game.habaShieldUsed = true;
+      player.score += basePts;
+      SFX.fireworks();
+      showCeremonyOverlay("shield", "🛡️ ¡ESCUDO REAL ACTIVADO!", `Bloqueaste el Haba en la ${letter} (0 penalización)`);
+      showSurpriseToast("king", `🛡️ ¡Escudo Real! Esquivaste el Haba en la ${letter}`);
+    } else {
+      player.foundHaba = true;
+      player.score = Math.max(0, player.score + basePts - 75);
+      SFX.haba();
+      if (window.RosconAndroid) window.RosconAndroid.vibrate(180);
+      showCeremonyOverlay("haba", `🫘 ¡EL HABA EN LA ${letter}!`, "Te toca pagar el Roscón (-75 pts)");
+      showSurpriseToast("haba", `¡TE TOCÓ EL HABA EN LA ${letter}! Pagas el Roscón (-75 pts)`);
+    }
+
+    if (game.timeLimit > 0) startClock();
+    advanceTurn(passPlayerAfter);
+  }
+
   function evaluateAnswer(isCorrect) {
     if (!game.active || !isMyActiveTurn()) return;
+    if (autoMicTimer) clearTimeout(autoMicTimer);
     if (game.isOnline) {
       sendOnlineAction("answer", { correct: !!isCorrect });
       return;
@@ -1085,8 +1549,6 @@
     const item = game.items[game.currentIndex];
     const player = game.players[game.currentPlayerIndex];
     if (!item || !player) return;
-
-    let surprise = "none";
 
     if (isCorrect) {
       item.status = "correct";
@@ -1100,26 +1562,35 @@
         game.prizeFound = true;
         player.foundKing = true;
         pts += 500;
-        surprise = "king";
-      } else if (game.currentIndex === game.habaIndex && !game.habaFound) {
-        game.habaFound = true;
-        player.foundHaba = true;
-        pts = Math.max(0, pts - 75);
-        surprise = "haba";
-      }
-
-      player.score += pts;
-
-      if (surprise === "king") {
+        player.score += pts;
         SFX.fireworks();
         triggerFireworks();
-        if (window.RosconAndroid) window.RosconAndroid.vibrate(140);
+        if (window.RosconAndroid) window.RosconAndroid.vibrate(150);
+        showCeremonyOverlay("king", "👑 ¡FIGURITA DEL REY!", `Encontrada en la ${item.q.Letter} (+500 PUNTOS)`);
         showSurpriseToast("king", `★ ¡PREMIO! ENCONTRASTE AL REY EN LA ${item.q.Letter} (+500 PTS) ★`);
-      } else if (surprise === "haba") {
-        SFX.haba();
-        if (window.RosconAndroid) window.RosconAndroid.vibrate(180);
-        showSurpriseToast("haba", `¡TE TOCÓ EL HABA EN LA ${item.q.Letter}! Pagas el Roscón (-75 pts)`);
+      } else if (game.currentIndex === game.habaIndex && !game.habaFound) {
+        game.habaFound = true;
+        if (isVip && !game.habaShieldUsed) {
+          game.habaShieldUsed = true;
+          player.score += pts;
+          SFX.fireworks();
+          showCeremonyOverlay("shield", "🛡️ ¡ESCUDO VIP!", `Tu Corona Real bloqueó el Haba en la ${item.q.Letter}`);
+          showSurpriseToast("king", `🛡️ ¡Tu Escudo VIP bloqueó el Haba en la ${item.q.Letter}!`);
+        } else if (!game.habaShieldUsed && game.players.length === 1 && selectedThemeId !== "infantil") {
+          stopClock();
+          pendingHabaContext = { player, letter: item.q.Letter, passPlayerAfter: false, basePts: pts };
+          document.getElementById("habaShieldModal").classList.remove("hidden");
+          return;
+        } else {
+          player.foundHaba = true;
+          player.score = Math.max(0, player.score + pts - 75);
+          SFX.haba();
+          if (window.RosconAndroid) window.RosconAndroid.vibrate(180);
+          showCeremonyOverlay("haba", `🫘 ¡EL HABA EN LA ${item.q.Letter}!`, "Pagas el Roscón (-75 PUNTOS)");
+          showSurpriseToast("haba", `¡TE TOCÓ EL HABA EN LA ${item.q.Letter}! Pagas el Roscón (-75 pts)`);
+        }
       } else {
+        player.score += pts;
         SFX.correct();
         if (window.RosconAndroid) window.RosconAndroid.vibrate(35);
       }
@@ -1140,11 +1611,23 @@
 
       if (game.currentIndex === game.habaIndex && !game.habaFound) {
         game.habaFound = true;
-        player.foundHaba = true;
-        player.score = Math.max(0, player.score - 75);
-        SFX.haba();
-        if (window.RosconAndroid) window.RosconAndroid.vibrate(180);
-        showSurpriseToast("haba", `¡TE TOCÓ EL HABA EN LA ${item.q.Letter}! Pagas el Roscón (-75 pts)`);
+        if (isVip && !game.habaShieldUsed) {
+          game.habaShieldUsed = true;
+          SFX.hint();
+          showCeremonyOverlay("shield", "🛡️ ¡ESCUDO VIP!", `Tu Corona Real evitó los -75 pts del Haba`);
+        } else if (!game.habaShieldUsed && game.players.length === 1 && selectedThemeId !== "infantil") {
+          stopClock();
+          pendingHabaContext = { player, letter: item.q.Letter, passPlayerAfter: true, basePts: 0 };
+          document.getElementById("habaShieldModal").classList.remove("hidden");
+          return;
+        } else {
+          player.foundHaba = true;
+          player.score = Math.max(0, player.score - 75);
+          SFX.haba();
+          if (window.RosconAndroid) window.RosconAndroid.vibrate(180);
+          showCeremonyOverlay("haba", `🫘 ¡EL HABA EN LA ${item.q.Letter}!`, "Pagas el Roscón (-75 PUNTOS)");
+          showSurpriseToast("haba", `¡TE TOCÓ EL HABA EN LA ${item.q.Letter}! Pagas el Roscón (-75 pts)`);
+        }
       } else {
         SFX.wrong();
         if (window.RosconAndroid) window.RosconAndroid.vibrate(70);
@@ -1174,24 +1657,8 @@
     const item = game.items[game.currentIndex];
     if (!item) return;
 
-    const validTargets = [item.q.Answer, ...(item.q.AcceptedVariants || [])];
-    const validNorms = new Set(validTargets.map(normalizeSpanish));
-    const validLoose = new Set(validTargets.map(normalizeLooseEnye));
-
     for (const raw of candidates) {
-      const cleaned = cleanSpokenSpanish(raw);
-      if (!cleaned) continue;
-      const compact = cleaned.replace(/\s+/g, "");
-      const parts = cleaned.split(" ");
-      const lastWord = parts[parts.length - 1] || "";
-
-      if (validNorms.has(cleaned) || validNorms.has(compact) || (lastWord && validNorms.has(lastWord))) {
-        evaluateAnswer(true);
-        return;
-      }
-      if (validLoose.has(normalizeLooseEnye(cleaned))
-          || validLoose.has(normalizeLooseEnye(compact))
-          || (lastWord && validLoose.has(normalizeLooseEnye(lastWord)))) {
+      if (isSmartSpanishMatch(raw, item.q)) {
         evaluateAnswer(true);
         return;
       }
@@ -1261,7 +1728,27 @@
 
     const playAgainBtn = document.getElementById("btnPlayAgain");
     if (playAgainBtn) {
-      playAgainBtn.textContent = game.isOnline ? "Revancha online" : "Jugar otra vez";
+      playAgainBtn.textContent = game.isOnline
+        ? "Revancha online"
+        : (game.isDaily ? "Ver Ranking Mundial" : "Jugar otra vez");
+    }
+
+    // Dibuja Tarjeta de Victoria compartible
+    renderVictoryCardCanvas(top, totalCorrect);
+
+    // Si era El Rosco del Día, guarda racha y envía al Ranking Mundial en Render
+    const dailyBanner = document.getElementById("dailyRankBanner");
+    if (dailyBanner) {
+      if (game.isDaily && reason !== "abandoned") {
+        const dDate = game.dailyDate || getTodayDateStr();
+        const meta = saveDailyCompletion(dDate, top.correct, top.score);
+        dailyBanner.classList.remove("hidden");
+        dailyBanner.textContent = `🔥 Racha Diaria: ${meta.streak || 1} día(s) · Enviando al Ranking Mundial...`;
+        const elapsedSec = Math.max(5, Math.round((Date.now() - (game.startedAtMs || Date.now())) / 1000));
+        submitDailyScoreToServer(dDate, top.correct, top.score, elapsedSec, !!top.foundKing);
+      } else {
+        dailyBanner.classList.add("hidden");
+      }
     }
 
     showScreen("screenSummary");
@@ -1273,6 +1760,340 @@
         triggerFireworks();
       }
     }
+  }
+
+  // ==================== TARJETA DE VICTORIA PNG + SHARE ====================
+  const cakeImgForCard = new Image();
+  cakeImgForCard.src = "roscon_cake.webp";
+
+  function renderVictoryCardCanvas(topPlayer, totalCorrect) {
+    const cv = document.getElementById("victoryCardCanvas");
+    if (!cv) return;
+    const ctx = cv.getContext("2d");
+    const W = cv.width, H = cv.height;
+
+    const grad = ctx.createLinearGradient(0, 0, 0, H);
+    grad.addColorStop(0, "#0b2920");
+    grad.addColorStop(0.55, "#071a15");
+    grad.addColorStop(1, "#05100d");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, W, H);
+
+    // Borde dorado doble
+    ctx.strokeStyle = "#fbc84a";
+    ctx.lineWidth = 6;
+    ctx.strokeRect(18, 18, W - 36, H - 36);
+    ctx.strokeStyle = "rgba(255, 230, 134, 0.35)";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(30, 30, W - 60, H - 60);
+
+    // Cabecera
+    ctx.textAlign = "center";
+    ctx.fillStyle = "#ffe686";
+    ctx.font = "900 22px sans-serif";
+    const modeTitle = game.isDaily
+      ? `🔥 EL ROSCO DEL DÍA · ${game.dailyDate || getTodayDateStr()}`
+      : `${(getSelectedTheme() || {}).icon || "🎄"} ${((getSelectedTheme() || {}).title || "ROSCÓN").toUpperCase()}`;
+    ctx.fillText(modeTitle, W / 2, 76);
+
+    ctx.fillStyle = "#ffffff";
+    ctx.font = "900 44px sans-serif";
+    ctx.fillText("ROSCÓN DE REYES", W / 2, 128);
+
+    // Roscón central + 24 letras coloreadas alrededor
+    const cx = W / 2, cy = 385, ringR = 192;
+    const glow = ctx.createRadialGradient(cx, cy, 40, cx, cy, 225);
+    glow.addColorStop(0, "rgba(251, 200, 74, 0.32)");
+    glow.addColorStop(1, "rgba(251, 200, 74, 0)");
+    ctx.fillStyle = glow;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 225, 0, Math.PI * 2);
+    ctx.fill();
+
+    if (cakeImgForCard.complete && cakeImgForCard.naturalWidth > 0) {
+      ctx.drawImage(cakeImgForCard, cx - 155, cy - 155, 310, 310);
+    }
+
+    // Medallón central con puntuación
+    ctx.fillStyle = "#082019";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 74, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#ffe686";
+    ctx.lineWidth = 4;
+    ctx.stroke();
+
+    ctx.fillStyle = "#ffe686";
+    ctx.font = "900 38px sans-serif";
+    ctx.fillText(`${topPlayer.correct}/${game.items.length || 24}`, cx, cy + 4);
+    ctx.fillStyle = "#c8e6dc";
+    ctx.font = "800 18px sans-serif";
+    ctx.fillText(`${topPlayer.score} PTS`, cx, cy + 34);
+
+    // 24 fichas del rosco
+    const n = game.items.length || 24;
+    for (let i = 0; i < n; i++) {
+      const it = game.items[i];
+      const ang = (i / n) * Math.PI * 2 - Math.PI / 2;
+      const lx = cx + Math.cos(ang) * ringR;
+      const ly = cy + Math.sin(ang) * ringR;
+
+      let fill = "#1e3d33", stroke = "#fbc84a";
+      if (game.prizeFound && i === game.prizeIndex && it.status === "correct") {
+        fill = "#f5b324"; stroke = "#ffffff";
+      } else if (it.status === "correct") {
+        fill = "#16b877"; stroke = "#9efad3";
+      } else if (it.status === "wrong") {
+        fill = "#d92b3d"; stroke = "#ff9ea8";
+      } else if (it.status === "passed") {
+        fill = "#d98218"; stroke = "#ffe09e";
+      }
+
+      ctx.fillStyle = fill;
+      ctx.beginPath();
+      ctx.arc(lx, ly, 20, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 2.5;
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "900 18px sans-serif";
+      ctx.fillText(it.q.Letter, lx, ly + 6);
+    }
+
+    // Estadísticas inferiores
+    let extras = `Mejor racha: ×${topPlayer.bestStreak}`;
+    if (topPlayer.foundKing) extras += "  ·  ★ ENCONTRÓ AL REY";
+    if (topPlayer.foundHaba) extras += "  ·  🫘 HABA";
+    ctx.fillStyle = "#ffe686";
+    ctx.font = "800 22px sans-serif";
+    ctx.fillText(extras, W / 2, 658);
+
+    // Píldora dorada inferior
+    ctx.fillStyle = "#f5b82e";
+    ctx.beginPath();
+    ctx.roundRect(110, 698, W - 220, 62, 31);
+    ctx.fill();
+    ctx.fillStyle = "#161106";
+    ctx.font = "900 24px sans-serif";
+    ctx.fillText("¿SUPERAS MI ROSCÓN? 👑", W / 2, 738);
+
+    ctx.fillStyle = "#9ec5b8";
+    ctx.font = "700 18px sans-serif";
+    ctx.fillText("Roscón de Reyes · Juego por Voz · Newbie Pro Studio", W / 2, 804);
+  }
+
+  function buildEmojiShareText() {
+    const ranked = [...game.players].sort((a, b) => (b.correct - a.correct) || (b.score - a.score));
+    const top = ranked[0] || { correct: 0, score: 0, foundKing: false };
+    const ringEmojis = game.items.map((it, idx) => {
+      if (game.prizeFound && idx === game.prizeIndex && it.status === "correct") return "👑";
+      if (it.status === "correct") return "🟢";
+      if (it.status === "wrong") return "🔴";
+      return "🟡";
+    }).join("");
+    const modeLabel = game.isDaily ? `🔥 Rosco del Día (${game.dailyDate})` : `🎄 Roscón de Reyes`;
+    return `${modeLabel}: ${top.correct}/24 aciertos (${top.score} pts)${top.foundKing ? " ★¡Me tocó el Rey!" : ""}\n${ringEmojis}\n¿Me superas hablando? 👉 https://newbieprostudio.itch.io/roscon-de-reyes`;
+  }
+
+  async function shareVictoryCard() {
+    const cv = document.getElementById("victoryCardCanvas");
+    const shareText = buildEmojiShareText();
+    if (cv && window.RosconAndroid && window.RosconAndroid.shareVictoryCard) {
+      const dataUrl = cv.toDataURL("image/png");
+      window.RosconAndroid.shareVictoryCard(dataUrl, shareText);
+      return;
+    }
+    try {
+      if (cv && navigator.share) {
+        const blob = await new Promise(res => cv.toBlob(res, "image/png"));
+        const file = new File([blob], "roscon_victoria.png", { type: "image/png" });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ title: "Roscón de Reyes", text: shareText, files: [file] });
+          return;
+        }
+        await navigator.share({ title: "Roscón de Reyes", text: shareText });
+        return;
+      }
+    } catch (_) {}
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(shareText).catch(() => {});
+      showSurpriseToast("king", "✅ Resultado copiado al portapapeles");
+    }
+  }
+
+  // ==================== EL ROSCO DEL DÍA + RANKING MUNDIAL ====================
+  function seededHash(str) {
+    let h = 2166136261 >>> 0;
+    for (let i = 0; i < str.length; i++) {
+      h ^= str.charCodeAt(i);
+      h = Math.imul(h, 16777619);
+    }
+    return h >>> 0;
+  }
+
+  function buildOfflineDailyFallback(dateStr) {
+    let seed = seededHash("ROSCON_OFFLINE_DAILY_" + dateStr);
+    const nextRand = () => {
+      seed = (seed + 0x6D2B79F5) >>> 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+    const byL = {};
+    for (const l of ROSCO_LETTERS) byL[l] = [];
+    for (const q of allQuestions) {
+      if (byL[q.Letter]) byL[q.Letter].push(q);
+    }
+    const questions = [];
+    const usedDailyAns = new Set();
+    for (const l of ROSCO_LETTERS) {
+      const pool = (byL[l] || []).filter(q => !usedDailyAns.has(normalizeSpanish(q.Answer)));
+      if (pool.length > 0) {
+        const pick = pool[Math.floor(nextRand() * pool.length)];
+        usedDailyAns.add(normalizeSpanish(pick.Answer));
+        questions.push(pick);
+      }
+    }
+    const prizeIndex = Math.floor(nextRand() * questions.length);
+    const habaIndex = (prizeIndex + 1 + Math.floor(nextRand() * Math.max(1, questions.length - 1))) % Math.max(1, questions.length);
+    return { date: dateStr, timeLimit: 180, hints: 3, prizeIndex, habaIndex, questions };
+  }
+
+  async function startDailyChallenge() {
+    document.getElementById("leaderboardModal").classList.add("hidden");
+    leaveOnlineRoom(false);
+    const today = getTodayDateStr();
+    let daily = null;
+
+    try {
+      const res = await nativeHttpJson(`${online.serverUrl}/api/daily?date=${encodeURIComponent(today)}`, "GET", null, 7000, null);
+      if (res.ok && res.data && res.data.daily && Array.isArray(res.data.daily.questions) && res.data.daily.questions.length > 0) {
+        daily = res.data.daily;
+      }
+    } catch (_) {}
+
+    if (!daily) {
+      await loadThemeBank("navidad");
+      daily = buildOfflineDailyFallback(today);
+    }
+
+    const nickInp = document.getElementById("dailyPlayerNameInput");
+    const savedNick = (nickInp && nickInp.value.trim()) || localStorage.getItem(PLAYER_NAME_KEY) || "Jugador";
+    const displayNick = isVip ? `👑 ${savedNick.replace(/^👑\s*/, "")}` : savedNick;
+
+    game.isOnline = false;
+    game.isDaily = true;
+    game.dailyDate = daily.date || today;
+    game.startedAtMs = Date.now();
+    game.habaShieldUsed = false;
+    game.players = [{
+      id: 0,
+      name: displayNick,
+      score: 0,
+      correct: 0,
+      wrong: 0,
+      streak: 0,
+      bestStreak: 0,
+      hintsLeft: (daily.hints || 3) + (isVip ? 2 : 0),
+      foundKing: false,
+      foundHaba: false
+    }];
+    for (const q of (daily.questions || [])) {
+      markQuestionPlayed(q);
+    }
+    savePlayedHistory();
+
+    game.items = daily.questions.map(q => ({
+      q,
+      status: "pending",
+      revealed: q.Mode === "StartsWith" ? [0] : []
+    }));
+    game.prizeFound = false;
+    game.habaFound = false;
+    game.prizeIndex = typeof daily.prizeIndex === "number" ? daily.prizeIndex : 0;
+    game.habaIndex = typeof daily.habaIndex === "number" ? daily.habaIndex : 1;
+    game.currentIndex = 0;
+    game.currentPlayerIndex = 0;
+    game.timeLimit = daily.timeLimit || 180;
+    game.timeRemaining = game.timeLimit;
+    game.lap = 1;
+    game.active = true;
+    game.listening = false;
+    game.lastSpokenId = "";
+
+    document.getElementById("surpriseToast").classList.add("hidden");
+    buildLetterButtons();
+    showScreen("screenGame");
+    renderGame();
+    startClock();
+  }
+
+  function renderLeaderboardRows(rows) {
+    const box = document.getElementById("leaderboardList");
+    if (!box) return;
+    if (!Array.isArray(rows) || rows.length === 0) {
+      box.innerHTML = `<div class="lb-empty">¡Aún no hay marcas hoy! Sé el primero en coronarte #1 del mundo 👑</div>`;
+      return;
+    }
+    box.innerHTML = "";
+    rows.forEach((r, idx) => {
+      const div = document.createElement("div");
+      div.className = `lb-row${idx === 0 ? " top1" : ""}`;
+      const crown = r.isVip ? "👑 " : "";
+      const kingStar = r.foundKing ? " ★" : "";
+      div.innerHTML = `
+        <span>#${r.rank || (idx + 1)} ${crown}${r.name}${kingStar}</span>
+        <span>${r.correct}/24 · ${r.score} pts</span>
+      `;
+      box.appendChild(div);
+    });
+  }
+
+  async function openLeaderboardModal() {
+    const modal = document.getElementById("leaderboardModal");
+    if (!modal) return;
+    const today = getTodayDateStr();
+    document.getElementById("leaderboardDateSub").textContent = `Clasificación mundial · ${today}`;
+    const nickInp = document.getElementById("dailyPlayerNameInput");
+    if (nickInp && !nickInp.value) {
+      try { nickInp.value = localStorage.getItem(PLAYER_NAME_KEY) || ""; } catch (_) {}
+    }
+    document.getElementById("leaderboardList").innerHTML = `<div class="lb-empty">Conectando con el Ranking Mundial...</div>`;
+    modal.classList.remove("hidden");
+    try {
+      const res = await nativeHttpJson(`${online.serverUrl}/api/daily/leaderboard?date=${encodeURIComponent(today)}`, "GET", null, 8000, null);
+      if (res.ok && res.data && res.data.ok) {
+        renderLeaderboardRows(res.data.leaderboard || []);
+        return;
+      }
+    } catch (_) {}
+    document.getElementById("leaderboardList").innerHTML = `<div class="lb-empty">Sin conexión al ranking ahora mismo. ¡Puedes jugar igual!</div>`;
+  }
+
+  async function submitDailyScoreToServer(dateStr, correct, score, elapsedSec, foundKing) {
+    const rawNick = (document.getElementById("dailyPlayerNameInput")?.value || localStorage.getItem(PLAYER_NAME_KEY) || "Jugador").trim().slice(0, 16) || "Jugador";
+    try { localStorage.setItem(PLAYER_NAME_KEY, rawNick); } catch (_) {}
+    try {
+      const res = await nativeHttpJson(`${online.serverUrl}/api/daily/submit`, "POST", {
+        playerId: online.playerId,
+        name: rawNick.replace(/^👑\s*/, ""),
+        isVip,
+        date: dateStr,
+        correct,
+        score,
+        elapsedSec,
+        foundKing
+      }, 10000, null);
+      if (res.ok && res.data && res.data.ok) {
+        const dailyBanner = document.getElementById("dailyRankBanner");
+        const meta = loadDailyMeta();
+        if (dailyBanner) {
+          dailyBanner.textContent = `🏆 Puesto Mundial Hoy: #${res.data.myRank} · 🔥 Racha: ${meta.streak || 1} día(s)`;
+        }
+      }
+    } catch (_) {}
   }
 
   // ==================== ONLINE 1 VS 1 ENGINE ====================
@@ -1584,9 +2405,7 @@
     // Guarda todas las 24 preguntas del rosco online en el historial local para no repetirlas nunca
     let addedHistory = false;
     for (const it of (room.items || [])) {
-      const k = questionKey(it.q);
-      if (!playedKeys.has(k)) {
-        playedKeys.add(k);
+      if (markQuestionPlayed(it.q)) {
         addedHistory = true;
       }
     }
@@ -1838,10 +2657,39 @@
     });
   });
 
+  window.onAndroidRewardGranted = (kind) => {
+    if (kind === "haba_shield") {
+      finalizeHabaChoice(true);
+      return;
+    }
+    if (game.active && game.players[game.currentPlayerIndex]) {
+      game.players[game.currentPlayerIndex].hintsLeft += 2;
+      SFX.fireworks();
+      showSurpriseToast("king", "🎬 ¡+2 Pistas Extra desbloqueadas!");
+      renderGame();
+    }
+  };
+
+  window.onAndroidVipStatus = (vipActive) => {
+    isVip = !!vipActive;
+    try { localStorage.setItem(VIP_STORAGE_KEY, isVip ? "1" : "0"); } catch (_) {}
+    if (isVip) {
+      document.getElementById("vipModal")?.classList.add("hidden");
+      showCeremonyOverlay("king", "👑 ¡CORONA REAL VIP!", "Ventajas permanentes activadas");
+    }
+    refreshWelcomeBadges();
+  };
+
+  window.onAndroidToast = (msg) => {
+    if (msg) showSurpriseToast("king", msg);
+  };
+
   document.getElementById("btnStart").addEventListener("click", startNewGame);
   document.getElementById("btnPlayAgain").addEventListener("click", () => {
     if (game.isOnline && online.roomCode) {
       sendOnlineAction("rematch", {});
+    } else if (game.isDaily) {
+      openLeaderboardModal();
     } else {
       startNewGame();
     }
@@ -1855,12 +2703,12 @@
     if (window.RosconAndroid) {
       window.RosconAndroid.stopListening();
     }
-    showScreen("screenSetup");
+    showScreen(game.isDaily ? "screenWelcome" : "screenSetup");
   });
 
   document.getElementById("btnBackMenu").addEventListener("click", () => {
     leaveOnlineRoom(false);
-    showScreen("screenSetup");
+    showScreen(game.isDaily ? "screenWelcome" : "screenSetup");
   });
 
   document.getElementById("btnFinish").addEventListener("click", () => {
@@ -1872,7 +2720,85 @@
   });
 
   document.getElementById("btnHint").addEventListener("click", useHint);
+  document.getElementById("btnPassQuick")?.addEventListener("click", passWord);
   document.getElementById("btnReplayAudio").addEventListener("click", () => speakCurrentClue(true));
+
+  document.getElementById("btnAutoMic")?.addEventListener("click", () => {
+    autoMicEnabled = !autoMicEnabled;
+    try { localStorage.setItem("roscon_automic_v2", autoMicEnabled ? "1" : "0"); } catch (_) {}
+    renderGame();
+    if (autoMicEnabled) {
+      showSurpriseToast("king", "🎙️ Manos Libres activado: escucha automática tras cada pista");
+    }
+  });
+
+  document.getElementById("btnToggleType")?.addEventListener("click", () => {
+    manualKeyboardOpen = !manualKeyboardOpen;
+    renderGame();
+    if (manualKeyboardOpen) {
+      document.getElementById("webAnswerInput")?.focus();
+    }
+  });
+
+  function toggleBgMusic() {
+    bgMusicEnabled = !bgMusicEnabled;
+    updateMusicEngine();
+  }
+  document.getElementById("btnMusicToggle")?.addEventListener("click", toggleBgMusic);
+  document.getElementById("btnMusicInGame")?.addEventListener("click", toggleBgMusic);
+
+  document.getElementById("btnDailyChallenge")?.addEventListener("click", () => {
+    const meta = loadDailyMeta();
+    if (meta.lastCompletedDate === getTodayDateStr()) {
+      openLeaderboardModal();
+    } else {
+      startDailyChallenge();
+    }
+  });
+  document.getElementById("btnThemesDaily")?.addEventListener("click", startDailyChallenge);
+  document.getElementById("btnOpenLeaderboard")?.addEventListener("click", openLeaderboardModal);
+  document.getElementById("btnCloseLeaderboard")?.addEventListener("click", () => {
+    document.getElementById("leaderboardModal").classList.add("hidden");
+  });
+  document.getElementById("btnPlayDailyFromModal")?.addEventListener("click", () => {
+    const nick = (document.getElementById("dailyPlayerNameInput")?.value || "").trim();
+    if (nick) {
+      try { localStorage.setItem(PLAYER_NAME_KEY, nick.slice(0, 16)); } catch (_) {}
+    }
+    startDailyChallenge();
+  });
+
+  document.getElementById("btnOpenVip")?.addEventListener("click", () => {
+    if (isVip) {
+      showSurpriseToast("king", "👑 Ya tienes la Corona Real VIP activa para siempre");
+    } else {
+      document.getElementById("vipModal").classList.remove("hidden");
+    }
+  });
+  document.getElementById("btnCloseVip")?.addEventListener("click", () => {
+    document.getElementById("vipModal").classList.add("hidden");
+  });
+  document.getElementById("btnBuyVipNow")?.addEventListener("click", () => {
+    if (window.RosconAndroid && window.RosconAndroid.buyVipUpgrade) {
+      window.RosconAndroid.buyVipUpgrade();
+    } else {
+      showSurpriseToast("king", "👑 La Corona Real VIP está disponible en la app oficial de Android (Google Play)");
+    }
+  });
+  document.getElementById("btnRestoreVip")?.addEventListener("click", () => {
+    if (window.RosconAndroid && window.RosconAndroid.restoreVipPurchases) {
+      window.RosconAndroid.restoreVipPurchases();
+    }
+  });
+
+  document.getElementById("btnWatchHabaShield")?.addEventListener("click", () => {
+    requestRewardedLifeline("haba_shield");
+  });
+  document.getElementById("btnAcceptHaba")?.addEventListener("click", () => {
+    finalizeHabaChoice(false);
+  });
+
+  document.getElementById("btnShareVictory")?.addEventListener("click", shareVictoryCard);
 
   document.getElementById("btnVoice").addEventListener("click", () => {
     if (!game.active || !isMyActiveTurn()) return;
@@ -1921,6 +2847,8 @@
   });
 
   updateSetupUi();
+  refreshWelcomeBadges();
+  updateMusicEngine();
   loadInitialQuestions();
   // Precalentamiento silencioso del servidor HTTPS en Render para que Online 1 vs 1 sea instantáneo
   setTimeout(() => {

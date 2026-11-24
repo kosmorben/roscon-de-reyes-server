@@ -1415,3 +1415,417 @@ html, body {
   text-overflow: ellipsis;
   max-width: 65%;
 }
+
+
+/* ==================== EDICIÓN GRANDIOSA v2.0 ==================== */
+.welcome-topbar {
+  position: absolute;
+  top: 10px;
+  left: 12px;
+  right: 12px;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.welcome-top-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.top-pill-gold {
+  border-color: var(--gold-bright);
+  color: var(--gold-bright);
+  background: rgba(92, 54, 8, 0.72);
+}
+
+.vip-pill {
+  border: 1.5px solid #fff0a6;
+  background: linear-gradient(135deg, #ffe078, #e59b14);
+  color: #1b1204;
+  border-radius: 999px;
+  padding: 6px 13px;
+  font-size: 11.5px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 0 14px rgba(251, 200, 74, 0.45);
+}
+
+.vip-pill.is-vip {
+  background: linear-gradient(135deg, #22e396, #0ea369);
+  border-color: #9efad3;
+  color: #062116;
+}
+
+.cta-daily {
+  width: min(90vw, 315px);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  margin-bottom: 14px;
+  border-radius: 18px;
+  border: 1.6px solid rgba(255, 214, 110, 0.72);
+  background: linear-gradient(135deg, rgba(164, 24, 42, 0.92), rgba(96, 14, 28, 0.94));
+  color: #fff9e6;
+  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.48);
+  cursor: pointer;
+  text-align: left;
+}
+
+.cta-daily:active {
+  transform: scale(0.98);
+}
+
+.daily-fire {
+  font-size: 23px;
+  line-height: 1;
+}
+
+.daily-texts {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.daily-texts strong {
+  font-size: 13.5px;
+  font-weight: 900;
+  color: var(--gold-bright);
+  letter-spacing: 0.4px;
+}
+
+.daily-texts small {
+  font-size: 11px;
+  font-weight: 600;
+  color: #ffe2e6;
+}
+
+.daily-streak-badge {
+  padding: 4px 9px;
+  border-radius: 999px;
+  background: rgba(255, 224, 120, 0.24);
+  border: 1px solid var(--gold-bright);
+  font-size: 11px;
+  font-weight: 900;
+  color: var(--gold-bright);
+}
+
+.themes-nav-row {
+  justify-content: space-between !important;
+}
+
+/* Quick Voice + Pasapalabra Row */
+.voice-pass-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+  width: 100%;
+  margin-bottom: 7px;
+}
+
+.voice-pass-row .btn-voice {
+  flex: 1;
+  margin-bottom: 0 !important;
+}
+
+.btn-pass-quick {
+  border: 1.6px solid var(--gold-border-strong);
+  background: linear-gradient(180deg, rgba(38, 68, 56, 0.95), rgba(18, 38, 31, 0.95));
+  color: var(--gold-bright);
+  border-radius: 14px;
+  padding: 0 14px;
+  font-size: 12.5px;
+  font-weight: 900;
+  letter-spacing: 0.3px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-pass-quick:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.btn-pass-quick:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.game-tools-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  margin-top: 2px;
+}
+
+.game-tools-row .btn-hint {
+  flex: 1;
+  margin-top: 0 !important;
+}
+
+.btn-hint.reward-mode {
+  background: linear-gradient(135deg, #126aa8, #0b4878) !important;
+  border-color: #7dd3fc !important;
+  color: #f0f9ff !important;
+}
+
+.btn-tool-pill {
+  border: 1.3px solid var(--gold-border);
+  background: rgba(14, 34, 28, 0.88);
+  color: var(--text-muted);
+  border-radius: 11px;
+  padding: 8px 10px;
+  font-size: 11.5px;
+  font-weight: 800;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.btn-tool-pill.active {
+  background: rgba(29, 212, 142, 0.22);
+  border-color: var(--emerald);
+  color: #bfffe3;
+}
+
+/* Dramatic Rey / Haba Ceremony Overlay */
+.ceremony-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 48;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  transition: opacity 0.28s ease;
+}
+
+.ceremony-overlay.hidden {
+  opacity: 0;
+}
+
+.ceremony-card {
+  padding: 20px 30px;
+  border-radius: 26px;
+  text-align: center;
+  background: radial-gradient(circle at 50% 25%, rgba(88, 56, 8, 0.96), rgba(22, 14, 4, 0.96));
+  border: 2.5px solid var(--gold-bright);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.72), 0 0 40px rgba(251, 200, 74, 0.55);
+  animation: ceremonyPop 0.42s cubic-bezier(0.22, 1.35, 0.36, 1);
+}
+
+.ceremony-card.haba-style {
+  background: radial-gradient(circle at 50% 25%, rgba(92, 24, 18, 0.96), rgba(28, 8, 8, 0.96));
+  border-color: #ff8a93;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.72), 0 0 36px rgba(224, 49, 66, 0.5);
+}
+
+@keyframes ceremonyPop {
+  0% { transform: scale(0.45); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+.ceremony-emoji {
+  font-size: 52px;
+  line-height: 1.05;
+  margin-bottom: 6px;
+}
+
+.ceremony-title {
+  font-size: 21px;
+  font-weight: 900;
+  color: var(--gold-bright);
+  letter-spacing: 0.6px;
+}
+
+.ceremony-sub {
+  font-size: 14px;
+  font-weight: 800;
+  color: #fff6d6;
+  margin-top: 3px;
+}
+
+/* Shareable Victory Card & Daily Rank Banner */
+.daily-rank-banner {
+  width: 100%;
+  padding: 10px 14px;
+  margin-bottom: 10px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(164, 24, 42, 0.9), rgba(92, 48, 8, 0.9));
+  border: 1.5px solid var(--gold-bright);
+  color: var(--gold-bright);
+  font-size: 13px;
+  font-weight: 900;
+  text-align: center;
+}
+
+.share-card-box {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 9px;
+  margin: 8px 0 14px;
+}
+
+.victory-card-preview {
+  width: min(76vw, 270px);
+  height: auto;
+  border-radius: 18px;
+  border: 1.6px solid var(--gold-border-strong);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+}
+
+.btn-share-victory {
+  width: 100%;
+  border: 1.6px solid #7dd3fc;
+  background: linear-gradient(135deg, #0d6efd, #084298);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(13, 110, 253, 0.35);
+}
+
+/* Modals (Leaderboard, VIP, Haba Shield) */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 46;
+  background: rgba(4, 12, 10, 0.80);
+  backdrop-filter: blur(7px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+}
+
+.modal-panel {
+  position: relative;
+  width: min(94vw, 390px);
+  max-height: 88vh;
+  overflow-y: auto;
+  background: linear-gradient(180deg, #113027, #081915);
+  border: 1.8px solid var(--gold-border-strong);
+  border-radius: 24px;
+  padding: 20px 18px 18px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 22px 54px rgba(0, 0, 0, 0.72);
+}
+
+.modal-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1px solid var(--gold-border);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-main);
+  font-size: 20px;
+  cursor: pointer;
+}
+
+.modal-heading {
+  font-size: 22px;
+  font-weight: 900;
+  color: var(--gold-bright);
+  margin: 4px 0;
+}
+
+.modal-sub {
+  font-size: 12.5px;
+  color: var(--text-muted);
+  line-height: 1.38;
+  margin-bottom: 12px;
+}
+
+.lb-name-row {
+  width: 100%;
+  margin-bottom: 10px;
+}
+
+.leaderboard-list {
+  width: 100%;
+  max-height: 250px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
+.lb-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(16, 42, 35, 0.85);
+  border: 1px solid rgba(251, 200, 74, 0.24);
+  font-size: 12.5px;
+  font-weight: 800;
+}
+
+.lb-row.top1 {
+  background: linear-gradient(135deg, rgba(112, 76, 8, 0.85), rgba(48, 34, 6, 0.88));
+  border-color: var(--gold-bright);
+  color: var(--gold-bright);
+}
+
+.lb-empty {
+  padding: 18px 10px;
+  font-size: 12.5px;
+  color: var(--text-muted);
+}
+
+.vip-big-crown {
+  font-size: 46px;
+  line-height: 1.05;
+  margin-bottom: 4px;
+}
+
+.vip-perks {
+  list-style: none;
+  width: 100%;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 4px 0 16px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(7, 20, 17, 0.72);
+  border: 1px solid rgba(251, 200, 74, 0.26);
+  font-size: 12.5px;
+  color: #eefaf6;
+}
+
+.vip-footnote {
+  font-size: 10.5px;
+  color: var(--text-muted);
+  margin: 8px 0 6px;
+}
+
+.cta-reward-video {
+  width: 100%;
+  border: 1.6px solid #7dd3fc;
+  background: linear-gradient(135deg, #0284c7, #0369a1);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 13px 16px;
+  font-size: 13.5px;
+  font-weight: 900;
+  cursor: pointer;
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.4);
+}

@@ -14,8 +14,25 @@
   <!-- Toast flotante festivo para Premio del Rey / Truco del Haba / Online -->
   <div id="surpriseToast" class="surprise-toast hidden" role="status"></div>
 
+  <!-- Animación ceremonial grande para Figurita del Rey / Haba -->
+  <div id="ceremonyOverlay" class="ceremony-overlay hidden" aria-live="polite">
+    <div id="ceremonyCard" class="ceremony-card">
+      <div id="ceremonyEmoji" class="ceremony-emoji">👑</div>
+      <div id="ceremonyTitle" class="ceremony-title">¡FIGURITA DEL REY!</div>
+      <div id="ceremonySub" class="ceremony-sub">+500 PUNTOS</div>
+    </div>
+  </div>
+
   <!-- PANTALLA 0: BIENVENIDA ALEGRE Y VISTOSA -->
   <main id="screenWelcome" class="screen screen-welcome active">
+    <div class="welcome-topbar">
+      <button type="button" id="btnMusicToggle" class="top-pill">🎵 Música: Sí</button>
+      <div class="welcome-top-right">
+        <button type="button" id="btnOpenLeaderboard" class="top-pill">🏆 Ranking</button>
+        <button type="button" id="btnOpenVip" class="vip-pill">👑 VIP</button>
+      </div>
+    </div>
+
     <div class="welcome-wrap">
       <h1 class="welcome-title">ROSCÓN DE REYES</h1>
       <p class="welcome-tagline">Escucha las pistas con voz en español, habla o escribe y consigue la corona</p>
@@ -35,9 +52,18 @@
         <span class="cta-welcome-arrow">➜</span>
       </button>
 
+      <button type="button" id="btnDailyChallenge" class="cta-daily">
+        <span class="daily-fire">🔥</span>
+        <span class="daily-texts">
+          <strong id="dailyBtnTitle">EL ROSCO DEL DÍA</strong>
+          <small id="dailyBtnSub">Compite hoy en el Ranking Mundial</small>
+        </span>
+        <span id="dailyStreakBadge" class="daily-streak-badge hidden">0d</span>
+      </button>
+
       <div class="welcome-chips">
-        <span class="welcome-chip">🎤 Voz en español</span>
-        <span class="welcome-chip">🧸 5 Temáticas + Infantil</span>
+        <span class="welcome-chip">🎤 Voz Cádiz + Auto-Micro</span>
+        <span class="welcome-chip">🎄 6 Temáticas + Infantil</span>
         <span class="welcome-chip">🌍 Online 1 vs 1</span>
       </div>
 
@@ -54,12 +80,13 @@
     <div class="themes-header">
       <div class="themes-nav-row">
         <button type="button" id="btnThemesBack" class="top-pill">&larr; Inicio</button>
+        <button type="button" id="btnThemesDaily" class="top-pill top-pill-gold">🔥 Rosco del Día</button>
       </div>
       <div class="themes-brand">
         <img src="roscon_cake.webp" alt="Roscón de Reyes" class="themes-mini-cake" />
         <div class="themes-brand-text">
           <h1 class="themes-title">ROSCÓN DE REYES</h1>
-          <div class="pill-badge themes-badge">ELIGE TU TEMÁTICA</div>
+          <div class="pill-badge themes-badge">6 TEMÁTICAS CON VOZ DE ESTUDIO</div>
         </div>
       </div>
     </div>
@@ -68,12 +95,12 @@
     </div>
   </main>
 
-  <!-- PANTALLA 1: MODO DE JUEGO -->
+  <!-- PANTALLA 1A: MODO DE JUEGO -->
   <main id="screenSetup" class="screen screen-setup">
     <div class="setup-wrap">
       <div class="setup-theme-bar">
         <button type="button" id="btnChangeTheme" class="top-pill">&larr; Temáticas</button>
-        <div id="activeThemePill" class="active-theme-pill">👑 Todo Mezclado</div>
+        <div id="activeThemePill" class="active-theme-pill">🎄 Especial Navidad</div>
       </div>
 
       <div class="hero-emblem">
@@ -202,29 +229,48 @@
           <div id="wordSlots" class="word-slots"></div>
         </div>
 
-        <button type="button" id="btnVoice" class="btn-voice">
-          HABLAR &middot; Responde o di &laquo;Paso&raquo;
-        </button>
+        <div class="voice-pass-row">
+          <button type="button" id="btnVoice" class="btn-voice">
+            🎤 HABLAR
+          </button>
+          <button type="button" id="btnPassQuick" class="btn-pass-quick" title="Pasapalabra">
+            ⏭ PASAR
+          </button>
+        </div>
 
-        <!-- Solo visible en navegador de PC si no hay microfono nativo Android -->
+        <!-- Barra para escribir (PC o si activan teclado en móvil) -->
         <form id="webTextAnswerRow" class="web-answer-row hidden">
           <input id="webAnswerInput" class="online-input web-answer-input" type="text" placeholder="Escribe respuesta o «paso»..." autocomplete="off" />
           <button type="submit" class="btn-join">Enviar</button>
         </form>
 
-        <button type="button" id="btnHint" class="btn-hint">Pista (3)</button>
+        <div class="game-tools-row">
+          <button type="button" id="btnHint" class="btn-hint">💡 Pista (4)</button>
+          <button type="button" id="btnAutoMic" class="btn-tool-pill" title="Escucha automática al terminar la locución">🎙️ Auto: No</button>
+          <button type="button" id="btnMusicInGame" class="btn-tool-pill active" title="Música navideña de fondo">🎵</button>
+          <button type="button" id="btnToggleType" class="btn-tool-pill" title="Mostrar teclado">⌨️</button>
+        </div>
       </section>
     </div>
   </main>
 
-  <!-- PANTALLA 3: RESUMEN -->
+  <!-- PANTALLA 3: RESUMEN Y TARJETA COMPARTIBLE -->
   <main id="screenSummary" class="screen screen-summary">
     <div class="summary-wrap">
       <div id="summaryBadge" class="pill-badge">FIN DE LA PARTIDA</div>
       <h2 id="summaryTitle" class="summary-title">Resumen</h2>
       <p id="summarySubtitle" class="summary-subtitle"></p>
 
+      <div id="dailyRankBanner" class="daily-rank-banner hidden"></div>
+
       <div id="summaryRanking" class="summary-ranking"></div>
+
+      <div class="share-card-box">
+        <canvas id="victoryCardCanvas" width="720" height="860" class="victory-card-preview"></canvas>
+        <button type="button" id="btnShareVictory" class="btn-share-victory">
+          📤 Compartir Tarjeta de Victoria
+        </button>
+      </div>
 
       <div class="summary-actions">
         <button type="button" id="btnPlayAgain" class="cta-gold">Jugar otra vez</button>
@@ -235,6 +281,64 @@
       <div id="summaryReview" class="summary-review"></div>
     </div>
   </main>
+
+  <!-- MODAL: RANKING MUNDIAL DEL ROSCO DEL DÍA -->
+  <div id="leaderboardModal" class="modal-backdrop hidden">
+    <div class="modal-panel">
+      <button type="button" id="btnCloseLeaderboard" class="modal-close">&times;</button>
+      <div class="pill-badge">TOP MUNDIAL EN VIVO</div>
+      <h3 class="modal-heading">🏆 EL ROSCO DEL DÍA</h3>
+      <p id="leaderboardDateSub" class="modal-sub">Mejores puntuaciones de hoy</p>
+
+      <div class="lb-name-row">
+        <input id="dailyPlayerNameInput" class="online-input" type="text" maxlength="16" placeholder="Tu apodo para el Ranking..." autocomplete="off" />
+      </div>
+
+      <div id="leaderboardList" class="leaderboard-list">
+        <div class="lb-empty">Cargando clasificación...</div>
+      </div>
+
+      <button type="button" id="btnPlayDailyFromModal" class="cta-gold">🔥 ¡JUGAR EL ROSCO DE HOY!</button>
+    </div>
+  </div>
+
+  <!-- MODAL: CORONA REAL VIP (1,49 €) -->
+  <div id="vipModal" class="modal-backdrop hidden">
+    <div class="modal-panel vip-panel">
+      <button type="button" id="btnCloseVip" class="modal-close">&times;</button>
+      <div class="vip-big-crown">👑</div>
+      <h3 class="modal-heading">CORONA REAL VIP</h3>
+      <p class="modal-sub">Conviértete en Rey o Reina permanente del Roscón y apoya a Newbie Pro Studio</p>
+
+      <ul class="vip-perks">
+        <li>✨ <strong>+2 Pistas de letra extra</strong> al empezar cada partida</li>
+        <li>🛡️ <strong>1 Escudo Real Anti-Haba automático</strong> en cada rosco</li>
+        <li>👑 <strong>Insignia Dorada VIP</strong> en el Ranking Mundial y Online 1 vs 1</li>
+        <li>🚫 <strong>Cero anuncios</strong> para siempre</li>
+      </ul>
+
+      <button type="button" id="btnBuyVipNow" class="cta-gold vip-cta">
+        DESBLOQUEAR CORONA VIP &middot; 1,49 €
+      </button>
+      <div class="vip-footnote">Pago único para siempre en Google Play &middot; Sin suscripciones</div>
+      <button type="button" id="btnRestoreVip" class="link-subtle">Restaurar compra anterior</button>
+    </div>
+  </div>
+
+  <!-- MODAL: ESCUDO ANTI-HABA (OPCIONAL CON VÍDEO CORTO) -->
+  <div id="habaShieldModal" class="modal-backdrop hidden">
+    <div class="modal-panel haba-panel">
+      <div class="vip-big-crown">🫘</div>
+      <h3 class="modal-heading">¡CUIDADO, EL HABA!</h3>
+      <p class="modal-sub">Te ha salido el Haba (-75 puntos). ¿Quieres bloquearla con el Escudo Real?</p>
+      <button type="button" id="btnWatchHabaShield" class="cta-reward-video">
+        🎬 Activar Escudo Gratis (Vídeo corto)
+      </button>
+      <button type="button" id="btnAcceptHaba" class="btn-secondary full-btn" style="margin-top:8px;">
+        Aceptar el Haba (-75 pts)
+      </button>
+    </div>
+  </div>
 
   <!-- Fuegos artificiales y confeti navideño en primer plano -->
   <canvas id="fxCanvas" class="fx-canvas fx-top" aria-hidden="true"></canvas>
