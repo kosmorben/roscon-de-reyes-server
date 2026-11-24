@@ -37,6 +37,7 @@ CONTAINS_OK = {"Ñ", "Q", "X", "Z", "U"}
 WIKI_WORD_RE = re.compile(r"^[A-Za-zÁÉÍÓÚÜÑáéíóúüñ]{3,14}$")
 
 WIKI_THEME_CATS = {
+    "navidad": ["Categoría:Navidad", "Categoría:Gastronomía_navideña", "Categoría:Villancicos", "Categoría:Tradiciones_navideñas"],
     "futbol": ["Categoría:Fútbol", "Categoría:Equipos_de_fútbol_de_España", "Categoría:Futbolistas_de_España", "Categoría:Estadios_de_fútbol_de_España", "Categoría:Terminología_futbolística"],
     "entretenimiento": ["Categoría:Cine", "Categoría:Películas_de_animación", "Categoría:Géneros_musicales", "Categoría:Instrumentos_musicales", "Categoría:Series_de_televisión"],
     "historia": ["Categoría:Historia_de_España", "Categoría:Antiguo_Egipto", "Categoría:Imperio_romano", "Categoría:Países_de_Europa", "Categoría:Capitales_de_Europa", "Categoría:Ríos_de_España"],
@@ -110,17 +111,19 @@ def load_theme_by_letter(theme_id: str) -> dict:
 def ensure_voice_pack():
     global VOICE_DIR
     existing = sum(1 for p in VOICE_DIR.glob("*.ogg")) if VOICE_DIR.exists() else 0
-    if existing >= 800 or not VOICE_PACK_ZIP.exists():
+    zips = [p for p in (VOICE_PACK_ZIP, BASE_DIR / "voice_navidad.zip") if p.exists()]
+    if existing >= 950 or not zips:
         return
     for target_dir in (VOICE_DIR, Path(tempfile.gettempdir()) / "roscon_voice"):
         try:
             target_dir.mkdir(parents=True, exist_ok=True)
-            with zipfile.ZipFile(VOICE_PACK_ZIP, "r") as zf:
-                for info in zf.infolist():
-                    if not info.is_dir():
-                        fname = Path(info.filename).name
-                        if fname.lower().endswith((".ogg", ".mp3")):
-                            (target_dir / fname).write_bytes(zf.read(info))
+            for zpath in zips:
+                with zipfile.ZipFile(zpath, "r") as zf:
+                    for info in zf.infolist():
+                        if not info.is_dir():
+                            fname = Path(info.filename).name
+                            if fname.lower().endswith((".ogg", ".mp3")):
+                                (target_dir / fname).write_bytes(zf.read(info))
             VOICE_DIR = target_dir
             print(f"Extracted Fenrir voice pack to {VOICE_DIR}", flush=True)
             return
@@ -132,16 +135,123 @@ ensure_voice_pack()
 
 
 def _load_all_questions() -> list:
-    if DATA_FILE.exists():
-        return json.loads(DATA_FILE.read_text(encoding="utf-8"))
+    seen = set()
     merged = []
     for tid in THEMES_MAP:
         for pool in load_theme_by_letter(tid).values():
-            merged.extend(pool)
+            for q in pool:
+                k = question_key(q)
+                if k not in seen:
+                    seen.add(k)
+                    merged.append(q)
+    if DATA_FILE.exists():
+        for q in json.loads(DATA_FILE.read_text(encoding="utf-8")):
+            if q.get("Letter") in ROSCO_LETTERS and q.get("Answer") and q.get("Clue"):
+                k = question_key(q)
+                if k not in seen:
+                    seen.add(k)
+                    merged.append(q)
     return merged
 
 
 ALL_QUESTIONS = _load_all_questions()
+GLOBAL_BY_LETTER = {l: [] for l in ROSCO_LETTERS}
+for _q in ALL_QUESTIONS:
+    if _q.get("Letter") in GLOBAL_BY_LETTER:
+        GLOBAL_BY_LETTER[_q["Letter"]].append(_q)
+
+DAILY_SCORES_FILE = Path(tempfile.gettempdir()) / "roscon_daily_scores_v2.json"
+DAILY_BOARDS = {}
+try:
+    if DAILY_SCORES_FILE.exists():
+        DAILY_BOARDS = json.loads(DAILY_SCORES_FILE.read_text(encoding="utf-8"))
+except Exception:
+    DAILY_BOARDS = {}
+
+
+def get_today_es() -> str:
+    # Europe/Madrid UTC+1 winter date
+    return time.strftime("%Y-%m-%d", time.gmtime(time.time() + 3600))
+
+
+def save_daily_boards():
+    try:
+        # Keep recent 14 days so file stays tiny
+        keys = sorted(DAILY_BOARDS.keys())[-14:]
+        trimmed = {k: DAILY_BOARDS[k] for k in keys}
+        DAILY_SCORES_FILE.write_text(json.dumps(trimmed, ensure_ascii=False), encoding="utf-8")
+    except Exception:
+        pass
+
+
+def get_daily_leaderboard(date_str: str) -> list:
+    entries = list((DAILY_BOARDS.get(date_str) or {}).values())
+    entries.sort(key=lambda e: (-int(e.get("correct", 0)), -int(e.get("score", 0)), int(e.get("elapsedSec", 9999))))
+    out = []
+    for idx, item in enumerate(entries[:25], 1):
+        row = dict(item)
+        row["rank"] = idx
+        out.append(row)
+    return out
+
+
+def build_daily_challenge(date_str: str) -> dict:
+    try:
+        yr, mo, dy = [int(x) for x in date_str.split("-")]
+        day_ordinal = yr * 372 + mo * 31 + dy
+    except Exception:
+        day_ordinal = int(time.time() // 86400)
+
+    rng_day = random.Random(f"ROSCON_DAILY_V2_{date_str}")
+    voiced = get_voiced_keys()
+    theme_order = [t for t in ("navidad", "futbol", "entretenimiento", "historia", "ciencia") if t in THEMES_MAP]
+    if not theme_order:
+        theme_order = list(THEMES_MAP.keys())
+
+    by_letter = {l: [] for l in ROSCO_LETTERS}
+    seen = set()
+    for tid in theme_order:
+        tmap = load_theme_by_letter(tid)
+        for l in ROSCO_LETTERS:
+            for q in tmap.get(l, []):
+                na = norm_es(q.get("Answer", ""))
+                if not na or f"{l}|{na}" in seen:
+                    continue
+                seen.add(f"{l}|{na}")
+                by_letter[l].append(q)
+
+    items = []
+    used_answers = set()
+    for l in ROSCO_LETTERS:
+        pool = by_letter[l] or GLOBAL_BY_LETTER.get(l, [])
+        if not pool:
+            continue
+        vpool = [q for q in pool if sanitize_key(q.get("Id", "")) in voiced]
+        cands = vpool if vpool else pool
+        cands_sorted = sorted(cands, key=lambda q: str(q.get("Id", "")))
+        # Deterministic shuffle per letter + rotational index by day_ordinal -> ZERO repeats across consecutive days!
+        letter_rng = random.Random(f"ROSCON_DAILY_CYCLE_V2_{l}")
+        letter_rng.shuffle(cands_sorted)
+        n = len(cands_sorted)
+        pick = cands_sorted[day_ordinal % n]
+        for offset in range(n):
+            cand = cands_sorted[(day_ordinal + offset) % n]
+            if norm_es(cand.get("Answer", "")) not in used_answers:
+                pick = cand
+                break
+        used_answers.add(norm_es(pick.get("Answer", "")))
+        items.append(pick)
+
+    prize_idx = rng_day.randrange(len(items)) if items else 0
+    haba_idx = rng_day.randrange(len(items)) if len(items) <= 1 else (prize_idx + 1 + rng_day.randrange(len(items) - 1)) % len(items)
+    return {
+        "date": date_str,
+        "timeLimit": 180,
+        "hints": 3,
+        "prizeIndex": prize_idx,
+        "habaIndex": haba_idx,
+        "questions": items,
+    }
 
 
 def get_voiced_keys() -> set:
@@ -240,13 +350,44 @@ def build_shared_rosco(excluded_keys: set, theme_id: str = DEFAULT_THEME, diff: 
     voiced = get_voiced_keys()
     chosen = []
     target_diff = "dificil" if diff == "dificil" else "facil"
+
+    banned_answers = set()
+    banned_ids = set()
+    for k in (excluded_keys or set()):
+        ks = str(k)
+        if ks.startswith("ans:"):
+            banned_answers.add(ks[4:])
+        elif ks.startswith("id:"):
+            banned_ids.add(ks[3:])
+        elif "|" in ks:
+            banned_answers.add(ks.split("|", 1)[1])
+
+    def can_use(q: dict) -> bool:
+        na = norm_es(q.get("Answer", ""))
+        if not na or na in banned_answers:
+            return False
+        if question_key(q) in excluded_keys:
+            return False
+        if q.get("Id") and str(q["Id"]) in banned_ids:
+            return False
+        for v in (q.get("AcceptedVariants") or []):
+            nv = norm_es(v)
+            if nv and nv in banned_answers:
+                return False
+        return True
+
     for l in ROSCO_LETTERS:
         pool = by_letter.get(l, [])
-        if not pool:
-            continue
-        fresh = [q for q in pool if question_key(q) not in excluded_keys]
+        fresh = [q for q in pool if can_use(q)]
         if not fresh:
-            fresh = pool
+            gpool = GLOBAL_BY_LETTER.get(l, [])
+            gvoiced = [q for q in gpool if sanitize_key(q.get("Id", "")) in voiced and can_use(q)]
+            fresh = gvoiced if gvoiced else [q for q in gpool if can_use(q)]
+        if not fresh:
+            fresh = [q for q in (GLOBAL_BY_LETTER.get(l, []) or pool) if norm_es(q.get("Answer", "")) not in banned_answers]
+        if not fresh:
+            continue
+
         fresh_diff = [
             q for q in fresh
             if (
@@ -256,9 +397,16 @@ def build_shared_rosco(excluded_keys: set, theme_id: str = DEFAULT_THEME, diff: 
             )
         ]
         diff_pool = fresh_diff if fresh_diff else fresh
-        fresh_voiced = [q for q in diff_pool if sanitize_key(q["Id"]) in voiced]
+        fresh_voiced = [q for q in diff_pool if sanitize_key(q.get("Id", "")) in voiced]
         candidates = fresh_voiced if fresh_voiced else diff_pool
         pick = random.choice(candidates)
+        banned_answers.add(norm_es(pick.get("Answer", "")))
+        if pick.get("Id"):
+            banned_ids.add(str(pick["Id"]))
+        for v in (pick.get("AcceptedVariants") or []):
+            nv = norm_es(v)
+            if nv:
+                banned_answers.add(nv)
         chosen.append(pick)
     return chosen
 
@@ -685,6 +833,25 @@ class RosconHandler(BaseHTTPRequestHandler):
                 })
             return
 
+        if path == "/api/daily":
+            d_str = ((qs.get("date") or [""])[0] or get_today_es()).strip()[:10]
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", d_str):
+                d_str = get_today_es()
+            with LOCK:
+                challenge = build_daily_challenge(d_str)
+                board = get_daily_leaderboard(d_str)
+            self.send_json({"ok": True, "daily": challenge, "leaderboard": board})
+            return
+
+        if path == "/api/daily/leaderboard":
+            d_str = ((qs.get("date") or [""])[0] or get_today_es()).strip()[:10]
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", d_str):
+                d_str = get_today_es()
+            with LOCK:
+                board = get_daily_leaderboard(d_str)
+            self.send_json({"ok": True, "date": d_str, "leaderboard": board})
+            return
+
         if path == "/api/matchmake/status":
             pid = (qs.get("playerId") or [""])[0]
             with LOCK:
@@ -931,6 +1098,48 @@ class RosconHandler(BaseHTTPRequestHandler):
                     return
                 room["cond"].notify_all()
                 self.send_json({"ok": True, "room": serialize_room(room, pid)})
+            return
+
+        if path == "/api/daily/submit":
+            pid = str(body.get("playerId") or "").strip()[:40]
+            raw_name = str(body.get("name") or "Jugador").strip()[:16] or "Jugador"
+            is_vip = bool(body.get("isVip"))
+            d_str = str(body.get("date") or get_today_es()).strip()[:10]
+            if not re.match(r"^\d{4}-\d{2}-\d{2}$", d_str):
+                d_str = get_today_es()
+            if not pid:
+                self.send_json({"ok": False, "error": "playerId requerido"}, 400)
+                return
+            correct = max(0, min(24, int(body.get("correct") or 0)))
+            score = max(0, min(15000, int(body.get("score") or 0)))
+            elapsed = max(1, min(3600, int(body.get("elapsedSec") or 180)))
+            found_king = bool(body.get("foundKing"))
+
+            with LOCK:
+                day_map = DAILY_BOARDS.setdefault(d_str, {})
+                prev = day_map.get(pid)
+                candidate = {
+                    "playerId": pid,
+                    "name": raw_name,
+                    "isVip": is_vip,
+                    "correct": correct,
+                    "score": score,
+                    "elapsedSec": elapsed,
+                    "foundKing": found_king,
+                    "ts": int(time.time()),
+                }
+                if prev is None or (
+                    (correct, score, -elapsed) > (int(prev.get("correct", 0)), int(prev.get("score", 0)), -int(prev.get("elapsedSec", 9999)))
+                ):
+                    day_map[pid] = candidate
+                    save_daily_boards()
+                board = get_daily_leaderboard(d_str)
+                all_sorted = sorted(
+                    day_map.values(),
+                    key=lambda e: (-int(e.get("correct", 0)), -int(e.get("score", 0)), int(e.get("elapsedSec", 9999))),
+                )
+                my_rank = next((i + 1 for i, e in enumerate(all_sorted) if e["playerId"] == pid), len(all_sorted))
+            self.send_json({"ok": True, "date": d_str, "myRank": my_rank, "leaderboard": board})
             return
 
         self.send_json({"ok": False, "error": "Not found"}, 404)
