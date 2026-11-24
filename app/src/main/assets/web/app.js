@@ -290,6 +290,7 @@
       el.appendChild(b);
     }
   }
+  buildFairyRing(document.getElementById("welcomeFairyRing"), 20, 48.5);
   buildFairyRing(document.getElementById("heroFairyRing"), 16, 48.5);
   buildFairyRing(document.getElementById("wheelFairyRing"), 24, 49.5);
 
@@ -587,8 +588,7 @@
   const PLAYER_ID_KEY = "roscon_player_id_v1";
   const PLAYER_NAME_KEY = "roscon_player_name_v1";
   const SERVER_URL_KEY = "roscon_server_url_v1";
-  const DEFAULT_LAN_SERVER = "http://192.168.1.142:8765";
-  const FALLBACK_HTTPS_SERVER = "https://06cb1ca00d2eb1.app.lhr.life";
+  const DEFAULT_ONLINE_SERVER = "https://roscon-de-reyes.onrender.com";
 
   function getOrCreatePlayerId() {
     try {
@@ -605,13 +605,18 @@
 
   function getDefaultServerUrl() {
     if (!window.RosconAndroid && window.location && /^https?:/.test(window.location.origin)) {
-      return window.location.origin;
+      const host = (window.location.hostname || "").toLowerCase();
+      if (host.endsWith(".onrender.com") || host === "localhost" || host === "127.0.0.1") {
+        return window.location.origin;
+      }
     }
     try {
-      const saved = (localStorage.getItem(SERVER_URL_KEY) || "").trim();
-      if (saved) return saved.replace(/\/+$/, "");
+      const saved = (localStorage.getItem(SERVER_URL_KEY) || "").trim().replace(/\/+$/, "");
+      if (saved && !saved.includes("192.168.") && !saved.includes(".lhr.life")) {
+        return saved;
+      }
     } catch (_) {}
-    return DEFAULT_LAN_SERVER;
+    return DEFAULT_ONLINE_SERVER;
   }
 
   const online = {
@@ -1364,7 +1369,7 @@
 
   async function onlineApi(path, method = "GET", body = null, signal = null) {
     const url = `${online.serverUrl}${path}`;
-    const timeoutMs = path.includes("/room/state") ? 8000 : 5000;
+    const timeoutMs = path.includes("/room/state") ? 12000 : 18000;
     const res = await nativeHttpJson(url, method, body, timeoutMs, signal);
     if (!res.ok || res.data.ok === false) {
       throw new Error(res.data.error || `Error de servidor (${res.status})`);
@@ -1374,7 +1379,7 @@
 
   async function probeServerUrl(baseUrl) {
     try {
-      const res = await nativeHttpJson(`${baseUrl}/api/health`, "GET", null, 3000, null);
+      const res = await nativeHttpJson(`${baseUrl}/api/health`, "GET", null, 25000, null);
       if (res.ok && res.data && res.data.ok) return res.data;
     } catch (_) {}
     return null;
@@ -1386,13 +1391,19 @@
       pill.className = "server-pill";
       pill.textContent = "Conectando...";
     }
+    const wakeHintTimer = setTimeout(() => {
+      if (pill && pill.textContent === "Conectando...") {
+        pill.textContent = "Despertando servidor...";
+      }
+    }, 3500);
     const candidates = [];
-    for (const u of [online.serverUrl, DEFAULT_LAN_SERVER, FALLBACK_HTTPS_SERVER]) {
+    for (const u of [online.serverUrl, DEFAULT_ONLINE_SERVER]) {
       if (u && !candidates.includes(u)) candidates.push(u);
     }
     for (const cand of candidates) {
       const h = await probeServerUrl(cand);
       if (h) {
+        clearTimeout(wakeHintTimer);
         online.serverUrl = cand;
         const urlInp = document.getElementById("serverUrlInput");
         if (urlInp) urlInp.value = cand;
@@ -1404,6 +1415,7 @@
         return true;
       }
     }
+    clearTimeout(wakeHintTimer);
     if (pill) {
       pill.className = "server-pill err";
       pill.textContent = "○ Servidor no disponible";
@@ -1763,13 +1775,28 @@
     } else if (document.getElementById("screenOnlineLobby").classList.contains("active")) {
       cancelOnlineWait();
       showScreen("screenSetup");
-    } else {
+    } else if (document.getElementById("screenSetup").classList.contains("active")) {
       cancelOnlineWait();
       showScreen("screenThemes");
+    } else if (document.getElementById("screenThemes").classList.contains("active")) {
+      showScreen("screenWelcome");
     }
   };
 
   // ==================== UI BINDINGS ====================
+  const btnWelcomeEnter = document.getElementById("btnWelcomeEnter");
+  if (btnWelcomeEnter) {
+    btnWelcomeEnter.addEventListener("click", () => {
+      SFX.hint();
+      showScreen("screenThemes");
+    });
+  }
+  const btnThemesBack = document.getElementById("btnThemesBack");
+  if (btnThemesBack) {
+    btnThemesBack.addEventListener("click", () => {
+      showScreen("screenWelcome");
+    });
+  }
   const btnChangeTheme = document.getElementById("btnChangeTheme");
   if (btnChangeTheme) {
     btnChangeTheme.addEventListener("click", () => {
@@ -1895,4 +1922,8 @@
 
   updateSetupUi();
   loadInitialQuestions();
+  // Precalentamiento silencioso del servidor HTTPS en Render para que Online 1 vs 1 sea instantáneo
+  setTimeout(() => {
+    nativeHttpJson(`${online.serverUrl}/api/health`, "GET", null, 25000, null).catch(() => {});
+  }, 800);
 })();

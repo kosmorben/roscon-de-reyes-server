@@ -14,14 +14,52 @@
   <!-- Toast flotante festivo para Premio del Rey / Truco del Haba / Online -->
   <div id="surpriseToast" class="surprise-toast hidden" role="status"></div>
 
-  <!-- PANTALLA 0: SELECCIÓN DE TEMÁTICA (PRIMERA PANTALLA) -->
-  <main id="screenThemes" class="screen screen-themes active">
+  <!-- PANTALLA 0: BIENVENIDA ALEGRE Y VISTOSA -->
+  <main id="screenWelcome" class="screen screen-welcome active">
+    <div class="welcome-wrap">
+      <h1 class="welcome-title">ROSCÓN DE REYES</h1>
+      <p class="welcome-tagline">Escucha las pistas con voz en español, habla o escribe y consigue la corona</p>
+
+      <div class="welcome-hero">
+        <div class="welcome-halo"></div>
+        <div class="fairy-ring" id="welcomeFairyRing"></div>
+        <img src="roscon_cake.webp" alt="Roscón de Reyes" class="welcome-cake" />
+        <div class="welcome-center-badge">
+          <span class="welcome-crown">👑</span>
+          <span class="welcome-az">A–Z</span>
+        </div>
+      </div>
+
+      <button type="button" id="btnWelcomeEnter" class="cta-welcome">
+        <span>ELIGE TU TEMÁTICA</span>
+        <span class="cta-welcome-arrow">➜</span>
+      </button>
+
+      <div class="welcome-chips">
+        <span class="welcome-chip">🎤 Voz en español</span>
+        <span class="welcome-chip">🧸 5 Temáticas + Infantil</span>
+        <span class="welcome-chip">🌍 Online 1 vs 1</span>
+      </div>
+
+      <div class="welcome-surprises">
+        <span>★ Figurita del Rey <strong>+500</strong></span>
+        <span class="welcome-dot">·</span>
+        <span>🫘 ¡Cuidado con el Haba!</span>
+      </div>
+    </div>
+  </main>
+
+  <!-- PANTALLA 1: SELECCIÓN DE TEMÁTICA -->
+  <main id="screenThemes" class="screen screen-themes">
     <div class="themes-header">
+      <div class="themes-nav-row">
+        <button type="button" id="btnThemesBack" class="top-pill">&larr; Inicio</button>
+      </div>
       <div class="themes-brand">
         <img src="roscon_cake.webp" alt="Roscón de Reyes" class="themes-mini-cake" />
-        <div>
-          <div class="pill-badge themes-badge">ELIGE TU TEMÁTICA</div>
+        <div class="themes-brand-text">
           <h1 class="themes-title">ROSCÓN DE REYES</h1>
+          <div class="pill-badge themes-badge">ELIGE TU TEMÁTICA</div>
         </div>
       </div>
     </div>
@@ -118,7 +156,7 @@
         <div class="server-config-wrap">
           <button type="button" id="btnToggleServer" class="link-subtle">Configurar servidor</button>
           <div id="serverConfigBox" class="server-config-box hidden">
-            <input id="serverUrlInput" class="online-input server-input" type="url" placeholder="http://192.168.1.142:8765" autocomplete="off" />
+            <input id="serverUrlInput" class="online-input server-input" type="url" placeholder="https://roscon-de-reyes.onrender.com" autocomplete="off" />
             <button type="button" id="btnSaveServer" class="top-pill">Guardar y probar</button>
           </div>
         </div>
