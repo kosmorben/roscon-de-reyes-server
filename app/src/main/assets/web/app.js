@@ -7,8 +7,9 @@
   ];
 
   const DIFF_CONFIG = {
-    facil:   { soloTime: 0,   turnTime: 0,  hints: 4 },
-    dificil: { soloTime: 180, turnTime: 25, hints: 2 }
+    facil:   { soloTime: 0,   turnTime: 0,  hints: 4, suddenDeath: false },
+    dificil: { soloTime: 180, turnTime: 25, hints: 2, suddenDeath: false },
+    subita:  { soloTime: 15,  turnTime: 15, hints: 0, suddenDeath: true }
   };
 
   // ==================== SPANISH NORMALIZER ====================
@@ -165,11 +166,12 @@
     }
 
     return {
-      correct() {
+      correct(streak = 1) {
+        const lift = Math.pow(2, Math.min(Math.max(0, streak - 1), 9) / 12);
         playNotes([
-          { t: 0.00, d: 0.16, f1: 523.25, vol: 0.26 },
-          { t: 0.07, d: 0.18, f1: 659.25, vol: 0.26 },
-          { t: 0.14, d: 0.28, f1: 783.99, vol: 0.30 }
+          { t: 0.00, d: 0.15, f1: 523.25 * lift, vol: 0.25 },
+          { t: 0.06, d: 0.17, f1: 659.25 * lift, vol: 0.25 },
+          { t: 0.12, d: 0.28, f1: 783.99 * lift, vol: 0.29 }
         ]);
       },
       wrong() {
@@ -281,15 +283,48 @@
     }
   }
 
+  function spawnMiniBurst(normX, normY, c1 = "#ffd84d", c2 = "#25eb93") {
+    const count = 18;
+    for (let i = 0; i < count; i++) {
+      const ang = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.25;
+      const spd = 75 + Math.random() * 115;
+      sparks.push({
+        x: normX * viewW,
+        y: normY * viewH,
+        px: normX * viewW,
+        py: normY * viewH,
+        vx: Math.cos(ang) * spd,
+        vy: Math.sin(ang) * spd - 35,
+        delay: 0,
+        life: 0,
+        maxLife: 0.55 + Math.random() * 0.35,
+        color: i % 2 === 0 ? c1 : c2,
+        size: 2.1 + Math.random() * 1.8
+      });
+    }
+  }
+
+  const THEME_PARTICLE_COLORS = {
+    navidad:         ["rgba(245,250,255,", "rgba(255,232,150,"],
+    futbol:          ["rgba(62,242,158,",  "rgba(255,255,255,"],
+    entretenimiento: ["rgba(255,214,102,", "rgba(255,120,140,"],
+    historia:        ["rgba(251,196,90,",  "rgba(255,238,192,"],
+    ciencia:         ["rgba(96,218,255,",  "rgba(180,242,255,"],
+    infantil:        ["rgba(255,214,102,", "rgba(167,139,250,", "rgba(96,165,250,", "rgba(52,211,153,"]
+  };
+
   let lastFrame = performance.now();
   function animateFX(now) {
     const dt = Math.min(0.05, (now - lastFrame) / 1000);
     lastFrame = now;
     const t = now / 1000;
 
-    // Snow + top garland lights
+    // Partículas ambientales adaptadas a la temática activa
+    const curTheme = document.body.dataset.theme || "navidad";
+    const palette = THEME_PARTICLE_COLORS[curTheme] || THEME_PARTICLE_COLORS.navidad;
     snowCtx.clearRect(0, 0, viewW, viewH);
-    for (const f of flakes) {
+    for (let idx = 0; idx < flakes.length; idx++) {
+      const f = flakes[idx];
       f.y += f.vy * dt;
       if (f.y > viewH + 10) {
         f.y = -10;
@@ -298,7 +333,7 @@
       const x = f.x + Math.sin(t * 1.3 + f.phase) * f.sway;
       snowCtx.beginPath();
       snowCtx.arc(x, f.y, f.r, 0, Math.PI * 2);
-      snowCtx.fillStyle = `rgba(245, 250, 255, ${f.alpha})`;
+      snowCtx.fillStyle = `${palette[idx % palette.length]}${f.alpha})`;
       snowCtx.fill();
     }
 
@@ -635,6 +670,7 @@
 
   function updateThemePill() {
     const t = getSelectedTheme();
+    document.body.dataset.theme = selectedThemeId || "navidad";
     const pill = document.getElementById("activeThemePill");
     if (pill && t) {
       pill.textContent = `${t.icon || "🎄"} ${t.title}`;
@@ -918,6 +954,115 @@
     return meta;
   }
 
+  // ==================== RANGO REAL + 8 MEDALLAS DESBLOQUEABLES ====================
+  const PROFILE_STORAGE_KEY = "roscon_profile_v2";
+  const ROYAL_RANKS = [
+    { min: 0,   label: "🥖 Aprendiz de Pastelero" },
+    { min: 25,  label: "⭐ Paje Real" },
+    { min: 80,  label: "🎂 Maestro del Roscón" },
+    { min: 180, label: "👑 Rey de Oriente" },
+    { min: 350, label: "✨ Leyenda Real" }
+  ];
+  const MEDAL_DEFS = [
+    { id: "first_win",  icon: "🎉", name: "Primer Roscón",    desc: "Completa tu primera partida" },
+    { id: "streak_5",   icon: "🔥", name: "Racha de Fuego",   desc: "5 aciertos seguidos" },
+    { id: "streak_10",  icon: "⚡", name: "Imparable",        desc: "10 aciertos seguidos" },
+    { id: "found_king", icon: "👑", name: "Cazador del Rey",  desc: "Encuentra la Figurita del Rey" },
+    { id: "perfect_24", icon: "💎", name: "Corona Perfecta",  desc: "Consigue 24 de 24 en un rosco" },
+    { id: "daily_3",    icon: "📅", name: "Fiel al Roscón",   desc: "3 días seguidos en Roscón del Día" },
+    { id: "sudden_10",  icon: "💀", name: "Superviviente",    desc: "10 seguidas en Muerte Súbita" },
+    { id: "centurion",  icon: "🏆", name: "Centurión",        desc: "Acumula 100 aciertos totales" }
+  ];
+
+  function loadPlayerProfile() {
+    try {
+      const p = JSON.parse(localStorage.getItem(PROFILE_STORAGE_KEY) || "{}");
+      return {
+        totalCorrect: Number(p.totalCorrect) || 0,
+        gamesPlayed: Number(p.gamesPlayed) || 0,
+        bestSudden: Number(p.bestSudden) || 0,
+        medals: Array.isArray(p.medals) ? p.medals : []
+      };
+    } catch (_) {
+      return { totalCorrect: 0, gamesPlayed: 0, bestSudden: 0, medals: [] };
+    }
+  }
+
+  function savePlayerProfile(p) {
+    try { localStorage.setItem(PROFILE_STORAGE_KEY, JSON.stringify(p)); } catch (_) {}
+  }
+
+  function getRoyalRankInfo(totalCorrect) {
+    let cur = ROYAL_RANKS[0];
+    let next = ROYAL_RANKS[1];
+    for (let i = 0; i < ROYAL_RANKS.length; i++) {
+      if (totalCorrect >= ROYAL_RANKS[i].min) {
+        cur = ROYAL_RANKS[i];
+        next = ROYAL_RANKS[i + 1] || null;
+      }
+    }
+    const pct = next
+      ? Math.min(100, Math.round(((totalCorrect - cur.min) / Math.max(1, next.min - cur.min)) * 100))
+      : 100;
+    return { cur, next, pct };
+  }
+
+  function recordProfileProgress(topPlayer, totalCorrect, reason) {
+    const p = loadPlayerProfile();
+    p.totalCorrect += topPlayer.correct || 0;
+    if (reason !== "abandoned") p.gamesPlayed += 1;
+    if (game.isSuddenDeath && (topPlayer.correct || 0) > p.bestSudden) {
+      p.bestSudden = topPlayer.correct || 0;
+    }
+    const meta = loadDailyMeta();
+    const newlyUnlocked = [];
+    const unlock = (id) => {
+      if (!p.medals.includes(id)) {
+        p.medals.push(id);
+        const def = MEDAL_DEFS.find(m => m.id === id);
+        if (def) newlyUnlocked.push(def);
+      }
+    };
+    if (reason !== "abandoned" && p.gamesPlayed >= 1) unlock("first_win");
+    if ((topPlayer.bestStreak || 0) >= 5) unlock("streak_5");
+    if ((topPlayer.bestStreak || 0) >= 10) unlock("streak_10");
+    if (topPlayer.foundKing) unlock("found_king");
+    if (totalCorrect >= (game.items.length || 24) && totalCorrect >= 24) unlock("perfect_24");
+    if ((meta.streak || 0) >= 3) unlock("daily_3");
+    if (game.isSuddenDeath && (topPlayer.correct || 0) >= 10) unlock("sudden_10");
+    if (p.totalCorrect >= 100) unlock("centurion");
+
+    savePlayerProfile(p);
+    refreshWelcomeBadges();
+    if (newlyUnlocked.length > 0) {
+      const m = newlyUnlocked[0];
+      showSurpriseToast("king", `🏅 ¡Nueva Medalla: ${m.icon} ${m.name}!`);
+    }
+  }
+
+  function openMedalsModal() {
+    const p = loadPlayerProfile();
+    const r = getRoyalRankInfo(p.totalCorrect);
+    document.getElementById("medalsRankTitle").textContent = r.cur.label;
+    document.getElementById("medalsRankSub").textContent =
+      `${p.totalCorrect} aciertos totales · ⚡ Récord Súbita: ${p.bestSudden}${r.next ? ` · Siguiente rango: ${r.next.min}` : " · ¡Rango máximo!"}`;
+    document.getElementById("rankXpFill").style.width = `${r.pct}%`;
+    const grid = document.getElementById("medalsGrid");
+    grid.innerHTML = "";
+    for (const m of MEDAL_DEFS) {
+      const unlocked = p.medals.includes(m.id);
+      const card = document.createElement("div");
+      card.className = `medal-card${unlocked ? " unlocked" : ""}`;
+      card.innerHTML = `
+        <div class="medal-icon">${unlocked ? m.icon : "🔒"}</div>
+        <div class="medal-name">${m.name}</div>
+        <div class="medal-desc">${m.desc}</div>
+      `;
+      grid.appendChild(card);
+    }
+    document.getElementById("medalsModal").classList.remove("hidden");
+  }
+
   function refreshWelcomeBadges() {
     const vipBtn = document.getElementById("btnOpenVip");
     if (vipBtn) {
@@ -931,6 +1076,12 @@
       stBadge.classList.toggle("hidden", st <= 0);
       stBadge.textContent = `🔥 ${st}d`;
     }
+    const p = loadPlayerProfile();
+    const r = getRoyalRankInfo(p.totalCorrect);
+    const rankTxt = document.getElementById("welcomeRankText");
+    const medCnt = document.getElementById("welcomeMedalsCount");
+    if (rankTxt) rankTxt.textContent = r.cur.label;
+    if (medCnt) medCnt.textContent = `🏅 ${p.medals.length}/${MEDAL_DEFS.length}`;
   }
 
   const game = {
@@ -1070,9 +1221,12 @@
     if (rosco.length === 0) return;
 
     const cfg = DIFF_CONFIG[selectedDiff] || DIFF_CONFIG.facil;
-    const vipBonusHints = isVip ? 2 : 0;
+    const isSudden = !!cfg.suddenDeath;
+    const vipBonusHints = (isVip && !isSudden) ? 2 : 0;
     game.isOnline = false;
     game.isDaily = false;
+    game.isSuddenDeath = isSudden;
+    game.revealing = false;
     game.dailyDate = "";
     game.startedAtMs = Date.now();
     game.habaShieldUsed = false;
@@ -1192,8 +1346,67 @@
     const tEl = document.getElementById("centerTimer");
     if (!tEl) return;
     tEl.textContent = formatTimer(game.timeRemaining);
-    tEl.classList.toggle("urgent", game.timeLimit > 0 && game.timeRemaining <= 10);
+    const urgent = game.timeLimit > 0 && game.timeRemaining <= 10;
+    tEl.classList.toggle("urgent", urgent);
+
+    const ring = document.getElementById("timerRingProgress");
+    const svg = ring ? ring.parentElement : null;
+    if (ring && svg) {
+      const circ = 289.03;
+      if (game.timeLimit <= 0) {
+        svg.classList.add("no-timer");
+        ring.style.strokeDashoffset = "0";
+        ring.classList.remove("warn", "urgent");
+      } else {
+        svg.classList.remove("no-timer");
+        const frac = Math.max(0, Math.min(1, game.timeRemaining / game.timeLimit));
+        ring.style.strokeDashoffset = String((circ * (1 - frac)).toFixed(1));
+        ring.classList.toggle("urgent", urgent);
+        ring.classList.toggle("warn", !urgent && frac <= 0.35);
+      }
+    }
   }
+
+  let heardBubbleTimer = null;
+  function showHeardBubble(text, status = "") {
+    const el = document.getElementById("heardBubble");
+    if (!el || !text) return;
+    el.textContent = text;
+    el.className = `heard-bubble${status ? " " + status : ""}`;
+    if (heardBubbleTimer) clearTimeout(heardBubbleTimer);
+    heardBubbleTimer = setTimeout(() => el.classList.add("hidden"), 1700);
+  }
+
+  function spawnScorePop(text, isBad = false) {
+    const layer = document.getElementById("scorePopLayer");
+    const dots = document.getElementById("lettersRing")?.children;
+    if (!layer || !dots) return;
+    const activeDot = dots[game.currentIndex];
+    const pop = document.createElement("div");
+    pop.className = `score-pop${isBad ? " bad" : ""}`;
+    pop.textContent = text;
+    pop.style.left = activeDot ? activeDot.style.left : "50%";
+    pop.style.top = activeDot ? activeDot.style.top : "42%";
+    layer.appendChild(pop);
+    setTimeout(() => pop.remove(), 980);
+  }
+
+  function animateEqBars(pct) {
+    const wrap = document.getElementById("voiceEqBars");
+    if (!wrap) return;
+    const bars = wrap.children;
+    const weights = [0.55, 0.9, 1.0, 0.85, 0.6];
+    const base = Math.max(15, Math.min(100, Number(pct) || 20));
+    for (let i = 0; i < bars.length; i++) {
+      const jitter = 0.78 + Math.random() * 0.44;
+      const h = Math.max(4, Math.min(18, Math.round((base / 100) * 18 * weights[i % weights.length] * jitter)));
+      bars[i].style.height = `${h}px`;
+    }
+  }
+
+  window.onAndroidVoiceRms = (pct) => {
+    if (game.listening) animateEqBars(pct);
+  };
 
   function stopAllSpeech() {
     webClueSpeaking = false;
@@ -1335,7 +1548,9 @@
         : `EMPIEZA POR ${item.q.Letter}`;
 
     const stEl = document.getElementById("streakPill");
-    stEl.textContent = player.streak >= 2 ? `Racha ×${player.streak}` : "";
+    stEl.textContent = player.streak >= 2 ? `🔥 Racha ×${player.streak}` : "";
+    const wheelStage = document.getElementById("wheelStage");
+    if (wheelStage) wheelStage.classList.toggle("streak-hot", player.streak >= 3);
 
     const clueEl = document.getElementById("clueText");
     clueEl.textContent = item.q.Clue;
@@ -1408,20 +1623,50 @@
     speakCurrentClue(false);
   }
 
+  let eqIdleTimer = null;
   function updateVoiceButton() {
     updateMusicEngine();
     const btn = document.getElementById("btnVoice");
+    const lbl = document.getElementById("btnVoiceLabel");
+    const eq = document.getElementById("voiceEqBars");
     if (!btn) return;
     const myTurn = isMyActiveTurn();
-    btn.disabled = !myTurn;
-    btn.classList.toggle("listening", myTurn && game.listening);
+    btn.disabled = !myTurn || !!game.revealing;
+    const activeListen = myTurn && game.listening;
+    btn.classList.toggle("listening", activeListen);
+    if (eq) eq.classList.toggle("hidden", !activeListen);
+    if (eqIdleTimer) {
+      clearInterval(eqIdleTimer);
+      eqIdleTimer = null;
+    }
+    if (activeListen) {
+      animateEqBars(42);
+      eqIdleTimer = setInterval(() => {
+        if (game.listening) animateEqBars(25 + Math.random() * 55);
+      }, 140);
+    }
+    const target = lbl || btn;
     if (!myTurn && game.isOnline) {
       const activeP = game.players[game.currentPlayerIndex];
-      btn.textContent = `⏳ TURNO DE ${activeP ? activeP.name.toUpperCase() : "RIVAL"}`;
+      target.textContent = `⏳ TURNO DE ${activeP ? activeP.name.toUpperCase() : "RIVAL"}`;
     } else {
-      btn.textContent = game.listening
-        ? "🔴 ESCUCHANDO... (Toca para parar)"
+      target.textContent = activeListen
+        ? "ESCUCHANDO... (Toca para parar)"
         : "🎤 HABLAR · Responde o di «Paso»";
+    }
+  }
+
+  function flashAnswerTiles(answer, isCorrect) {
+    const slotsEl = document.getElementById("wordSlots");
+    if (!slotsEl || !answer) return;
+    slotsEl.innerHTML = "";
+    const compact = answer.length >= 10;
+    for (let i = 0; i < answer.length; i++) {
+      const box = document.createElement("div");
+      box.className = `word-slot${compact ? " compact" : ""} ${isCorrect ? "reveal-ok" : "reveal-bad"}`;
+      box.style.animationDelay = `${Math.min(i * 35, 280)}ms`;
+      box.textContent = answer[i].toUpperCase();
+      slotsEl.appendChild(box);
     }
   }
 
@@ -1492,7 +1737,7 @@
   }
 
   function passWord() {
-    if (!game.active || !isMyActiveTurn()) return;
+    if (!game.active || !isMyActiveTurn() || game.revealing) return;
     if (autoMicTimer) clearTimeout(autoMicTimer);
     if (game.isOnline) {
       sendOnlineAction("pass", {});
@@ -1502,6 +1747,7 @@
     if (!item) return;
     item.status = "passed";
     game.players[game.currentPlayerIndex].streak = 0;
+    if (game.isSuddenDeath && game.timeLimit > 0) game.timeRemaining = game.timeLimit;
     SFX.pass();
     advanceTurn(true);
   }
@@ -1533,7 +1779,7 @@
   }
 
   function evaluateAnswer(isCorrect) {
-    if (!game.active || !isMyActiveTurn()) return;
+    if (!game.active || !isMyActiveTurn() || game.revealing) return;
     if (autoMicTimer) clearTimeout(autoMicTimer);
     if (game.isOnline) {
       sendOnlineAction("answer", { correct: !!isCorrect });
@@ -1550,6 +1796,15 @@
       player.bestStreak = Math.max(player.bestStreak, player.streak);
       let pts = Math.max(40, 100 - Math.max(0, item.revealed.length - 1) * 20)
               + Math.min(125, (player.streak - 1) * 25);
+
+      const card = document.getElementById("questionCard");
+      if (card) {
+        card.classList.add("flash-ok");
+        setTimeout(() => card.classList.remove("flash-ok"), 520);
+      }
+      flashAnswerTiles(item.q.Answer, true);
+      spawnScorePop(player.streak >= 3 ? `+${pts} 🔥×${player.streak}` : `+${pts}`);
+      spawnMiniBurst(0.5, 0.30, "#ffd84d", "#25eb93");
 
       if (game.currentIndex === game.prizeIndex && !game.prizeFound) {
         game.prizeFound = true;
@@ -1584,14 +1839,19 @@
         }
       } else {
         player.score += pts;
-        SFX.correct();
+        SFX.correct(player.streak);
         if (window.RosconAndroid) window.RosconAndroid.vibrate(35);
       }
 
-      if (game.players.length > 1 && game.timeLimit > 0) {
+      if ((game.players.length > 1 || game.isSuddenDeath) && game.timeLimit > 0) {
         game.timeRemaining = game.timeLimit;
       }
-      advanceTurn(false);
+      game.revealing = true;
+      updateVoiceButton();
+      setTimeout(() => {
+        game.revealing = false;
+        if (game.active) advanceTurn(false);
+      }, 540);
     } else {
       item.status = "wrong";
       player.wrong++;
@@ -1601,8 +1861,10 @@
       card.classList.remove("shake");
       void card.offsetWidth;
       card.classList.add("shake");
+      flashAnswerTiles(item.q.Answer, false);
+      spawnScorePop(item.q.Answer.toUpperCase(), true);
 
-      if (game.currentIndex === game.habaIndex && !game.habaFound) {
+      if (game.currentIndex === game.habaIndex && !game.habaFound && !game.isSuddenDeath) {
         game.habaFound = true;
         if (isVip && !game.habaShieldUsed) {
           game.habaShieldUsed = true;
@@ -1625,23 +1887,37 @@
         SFX.wrong();
         if (window.RosconAndroid) window.RosconAndroid.vibrate(70);
       }
-      advanceTurn(true);
+      game.revealing = true;
+      updateVoiceButton();
+      setTimeout(() => {
+        game.revealing = false;
+        if (!game.active) return;
+        if (game.isSuddenDeath) {
+          finishGame("sudden_death");
+        } else {
+          advanceTurn(true);
+        }
+      }, 1150);
     }
   }
 
   function handleVoiceCandidates(candidates) {
     game.listening = false;
     updateVoiceButton();
-    if (!game.active || !Array.isArray(candidates) || candidates.length === 0) return;
+    if (!game.active || game.revealing || !Array.isArray(candidates) || candidates.length === 0) return;
+
+    const primarySpoken = String(candidates[0] || "").trim();
 
     for (const raw of candidates) {
       const norm = normalizeSpanish(raw);
       if (norm === "paso" || norm === "siguiente" || norm === "pasa"
           || norm.includes("pasapalabra") || norm.includes("pasa palabra") || norm.includes("paso palabra")) {
+        showHeardBubble("⏭ Pasapalabra");
         passWord();
         return;
       }
       if (norm === "pista" || norm === "ayuda" || norm === "dame una pista" || norm === "comodin") {
+        showHeardBubble("💡 Pista");
         useHint();
         return;
       }
@@ -1652,11 +1928,15 @@
 
     for (const raw of candidates) {
       if (isSmartSpanishMatch(raw, item.q)) {
+        showHeardBubble(`🗣️ «${raw}» ✅`, "ok");
         evaluateAnswer(true);
         return;
       }
     }
 
+    if (primarySpoken) {
+      showHeardBubble(`🗣️ «${primarySpoken}» ❌ · Era: ${item.q.Answer.toUpperCase()}`, "bad");
+    }
     evaluateAnswer(false);
   }
 
@@ -1679,7 +1959,9 @@
     document.getElementById("summaryBadge").textContent =
       totalCorrect === game.items.length
         ? "¡CORONA PERFECTA!"
-        : (reason === "timeout" ? "TIEMPO AGOTADO" : "FIN DE LA PARTIDA");
+        : (reason === "sudden_death"
+          ? "⚡ FIN DE MUERTE SÚBITA"
+          : (reason === "timeout" ? "TIEMPO AGOTADO" : "FIN DE LA PARTIDA"));
 
     const tied = ranked.length > 1 && ranked[0].correct === ranked[1].correct && ranked[0].score === ranked[1].score;
     document.getElementById("summaryTitle").textContent =
@@ -1725,6 +2007,9 @@
         ? "Revancha online"
         : (game.isDaily ? "Ver Ranking Mundial" : "Jugar otra vez");
     }
+
+    // Actualiza Rango Real + Medallas desbloqueables
+    recordProfileProgress(top, totalCorrect, reason);
 
     // Dibuja Tarjeta de Victoria compartible
     renderVictoryCardCanvas(top, totalCorrect);
@@ -1874,7 +2159,8 @@
 
     ctx.fillStyle = "#9ec5b8";
     ctx.font = "700 18px sans-serif";
-    ctx.fillText("Roscón de Reyes · Juego por Voz · Newbie Pro Studio", W / 2, 804);
+    const rankLabel = getRoyalRankInfo(loadPlayerProfile().totalCorrect).cur.label;
+    ctx.fillText(`${rankLabel} · Newbie Pro Studio`, W / 2, 804);
   }
 
   function buildEmojiShareText() {
@@ -1978,6 +2264,8 @@
 
     game.isOnline = false;
     game.isDaily = true;
+    game.isSuddenDeath = false;
+    game.revealing = false;
     game.dailyDate = daily.date || today;
     game.startedAtMs = Date.now();
     game.habaShieldUsed = false;
@@ -2645,9 +2933,15 @@
 
   document.querySelectorAll("#difficultyRow .choice-btn").forEach(btn => {
     btn.addEventListener("click", () => {
-      selectedDiff = btn.dataset.diff === "dificil" ? "dificil" : "facil";
+      const d = btn.dataset.diff;
+      selectedDiff = (d === "dificil" || d === "subita") ? d : "facil";
       document.querySelectorAll("#difficultyRow .choice-btn").forEach(b => b.classList.toggle("active", b === btn));
     });
+  });
+
+  document.getElementById("btnOpenMedals")?.addEventListener("click", openMedalsModal);
+  document.getElementById("btnCloseMedals")?.addEventListener("click", () => {
+    document.getElementById("medalsModal").classList.add("hidden");
   });
 
   window.onAndroidRewardGranted = (kind) => {

@@ -69,6 +69,11 @@
         <span class="welcome-dot">·</span>
         <span>🫘 ¡Cuidado con el Haba!</span>
       </div>
+
+      <button type="button" id="btnOpenMedals" class="rank-bar-btn">
+        <span id="welcomeRankText">🥖 Aprendiz de Pastelero</span>
+        <span id="welcomeMedalsCount" class="rank-medals-pill">🏅 0/8</span>
+      </button>
     </div>
   </main>
 
@@ -128,12 +133,15 @@
         </div>
 
         <div class="section-label">NIVEL DE DIFICULTAD</div>
-        <div class="choice-row" id="difficultyRow">
+        <div class="choice-row choice-row-3" id="difficultyRow">
           <button type="button" class="choice-btn active" data-diff="facil">
             <strong>Fácil</strong><span>Sin reloj · 4 pistas</span>
           </button>
           <button type="button" class="choice-btn" data-diff="dificil">
             <strong>Difícil</strong><span>3:00 min · 2 pistas</span>
+          </button>
+          <button type="button" class="choice-btn choice-btn-sudden" data-diff="subita">
+            <strong>⚡ Súbita</strong><span>15s · Sin fallos</span>
           </button>
         </div>
 
@@ -205,10 +213,15 @@
         <img src="roscon_cake.webp" alt="Roscón de Reyes" class="wheel-cake" />
         <div class="wheel-spotlight" id="wheelSpotlight"></div>
         <div class="wheel-hub">
+          <svg class="timer-ring-svg" viewBox="0 0 100 100" aria-hidden="true">
+            <circle class="timer-ring-bg" cx="50" cy="50" r="46" />
+            <circle id="timerRingProgress" class="timer-ring-progress" cx="50" cy="50" r="46" />
+          </svg>
           <div id="centerLetter" class="center-letter">A</div>
           <div id="centerTimer" class="center-timer">03:00</div>
         </div>
         <div id="lettersRing" class="letters-ring"></div>
+        <div id="scorePopLayer" class="score-pop-layer" aria-hidden="true"></div>
       </div>
 
       <section class="glass-card question-card" id="questionCard">
@@ -225,9 +238,12 @@
           <div id="wordSlots" class="word-slots"></div>
         </div>
 
+        <div id="heardBubble" class="heard-bubble hidden" role="status"></div>
+
         <div class="voice-pass-row">
           <button type="button" id="btnVoice" class="btn-voice">
-            🎤 HABLAR
+            <span id="voiceEqBars" class="voice-eq-bars hidden" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+            <span id="btnVoiceLabel">🎤 HABLAR</span>
           </button>
           <button type="button" id="btnPassQuick" class="btn-pass-quick" title="Pasapalabra">
             ⏭ PASAR
@@ -333,6 +349,18 @@
       <button type="button" id="btnAcceptHaba" class="btn-secondary full-btn" style="margin-top:8px;">
         Aceptar el Haba (-75 pts)
       </button>
+    </div>
+  </div>
+
+  <!-- MODAL: RANGO REAL Y MEDALLAS DESBLOQUEABLES -->
+  <div id="medalsModal" class="modal-backdrop hidden">
+    <div class="modal-panel medals-panel">
+      <button type="button" id="btnCloseMedals" class="modal-close">&times;</button>
+      <div id="medalsRankBadge" class="pill-badge">RANGO REAL</div>
+      <h3 id="medalsRankTitle" class="modal-heading">🥖 Aprendiz de Pastelero</h3>
+      <p id="medalsRankSub" class="modal-sub">0 aciertos totales · Récord Súbita: 0</p>
+      <div class="rank-xp-track"><div id="rankXpFill" class="rank-xp-fill"></div></div>
+      <div id="medalsGrid" class="medals-grid"></div>
     </div>
   </div>
 

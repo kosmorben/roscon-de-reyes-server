@@ -1829,3 +1829,311 @@ html, body {
   cursor: pointer;
   box-shadow: 0 6px 18px rgba(2, 132, 199, 0.4);
 }
+
+
+/* ==================== EDICIÓN v2.1.0: JUICE, VOICE EQ, THEMES, TIMER RING, MEDALS & SUDDEN DEATH ==================== */
+
+/* 1. Rango Real + Botón Medallas en Bienvenida */
+.rank-bar-btn {
+  margin-top: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 13px;
+  border-radius: 999px;
+  border: 1.3px solid rgba(255, 224, 128, 0.55);
+  background: linear-gradient(135deg, rgba(16, 46, 36, 0.9), rgba(9, 26, 21, 0.92));
+  color: #fff3c4;
+  font-size: 11.8px;
+  font-weight: 800;
+  cursor: pointer;
+  box-shadow: 0 5px 14px rgba(0, 0, 0, 0.36);
+}
+
+.rank-bar-btn:active {
+  transform: scale(0.96);
+}
+
+.rank-medals-pill {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(251, 200, 74, 0.22);
+  border: 1px solid rgba(251, 200, 74, 0.55);
+  color: var(--gold-bright);
+  font-size: 11px;
+  font-weight: 900;
+}
+
+/* 2. Modo 3 columnas (Fácil / Difícil / ⚡ Súbita) */
+.choice-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 7px;
+}
+
+.choice-row-3 .choice-btn {
+  padding: 9px 6px;
+}
+
+.choice-row-3 .choice-btn strong {
+  font-size: 12.5px;
+}
+
+.choice-row-3 .choice-btn span {
+  font-size: 10px;
+}
+
+.choice-btn-sudden.active {
+  border-color: #fb923c !important;
+  background: linear-gradient(135deg, rgba(180, 42, 16, 0.85), rgba(112, 22, 10, 0.9)) !important;
+  box-shadow: 0 0 16px rgba(251, 146, 60, 0.42);
+}
+
+/* 3. Anillo Circular SVG de Tiempo en el Centro del Roscón */
+.timer-ring-svg {
+  position: absolute;
+  inset: -4px;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  transform: rotate(-90deg);
+  pointer-events: none;
+  z-index: 3;
+}
+
+.timer-ring-bg {
+  fill: none;
+  stroke: rgba(255, 230, 134, 0.14);
+  stroke-width: 4;
+}
+
+.timer-ring-progress {
+  fill: none;
+  stroke: #fbc84a;
+  stroke-width: 4.5;
+  stroke-linecap: round;
+  stroke-dasharray: 289.03;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 0.85s linear, stroke 0.25s ease;
+  filter: drop-shadow(0 0 5px rgba(251, 200, 74, 0.65));
+}
+
+.timer-ring-progress.warn {
+  stroke: #fb923c;
+  filter: drop-shadow(0 0 6px rgba(251, 146, 60, 0.8));
+}
+
+.timer-ring-progress.urgent {
+  stroke: #ff4757;
+  filter: drop-shadow(0 0 8px rgba(255, 71, 87, 0.95));
+}
+
+.timer-ring-svg.no-timer {
+  opacity: 0.25;
+}
+
+/* 4. Game Juice: Racha en llamas, Puntos flotantes & Flip de casillas */
+.wheel-stage.streak-hot .wheel-halo {
+  background: radial-gradient(circle, rgba(255, 196, 54, 0.56) 0%, rgba(255, 94, 42, 0.26) 50%, rgba(0, 0, 0, 0) 75%);
+  animation: streakPulse 1.1s ease-in-out infinite;
+}
+
+@keyframes streakPulse {
+  0%, 100% { transform: scale(0.98); opacity: 0.85; }
+  50% { transform: scale(1.07); opacity: 1; }
+}
+
+.score-pop-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 15;
+  overflow: visible;
+}
+
+.score-pop {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font-size: 16px;
+  font-weight: 900;
+  color: #ffe875;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92), 0 0 12px rgba(251, 200, 74, 0.8);
+  white-space: nowrap;
+  animation: scoreFloatUp 0.95s cubic-bezier(0.2, 0.9, 0.3, 1) forwards;
+}
+
+.score-pop.bad {
+  color: #ff8e99;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.92), 0 0 10px rgba(224, 49, 66, 0.85);
+}
+
+@keyframes scoreFloatUp {
+  0% { opacity: 0; transform: translate(-50%, -10%) scale(0.65); }
+  22% { opacity: 1; transform: translate(-50%, -55%) scale(1.14); }
+  100% { opacity: 0; transform: translate(-50%, -185%) scale(0.95); }
+}
+
+.word-slot.reveal-ok {
+  background: linear-gradient(180deg, #1fd98d, #0f9c63) !important;
+  border-color: #b5ffe0 !important;
+  color: #042215 !important;
+  animation: tileFlip 0.36s ease both;
+}
+
+.word-slot.reveal-bad {
+  background: linear-gradient(180deg, #e63946, #a4161a) !important;
+  border-color: #ffb3ba !important;
+  color: #ffffff !important;
+  animation: tileFlip 0.36s ease both;
+}
+
+@keyframes tileFlip {
+  0% { transform: rotateX(75deg) scale(0.92); opacity: 0.5; }
+  60% { transform: rotateX(-10deg) scale(1.06); opacity: 1; }
+  100% { transform: rotateX(0deg) scale(1); opacity: 1; }
+}
+
+.question-card.flash-ok {
+  box-shadow: 0 0 0 2px rgba(31, 217, 141, 0.8), 0 10px 28px rgba(15, 156, 99, 0.45);
+}
+
+/* 5. Ecualizador de voz en vivo + Burbuja «Qué escuchó el micro» */
+.btn-voice {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.voice-eq-bars {
+  display: inline-flex;
+  align-items: center;
+  gap: 2.5px;
+  height: 18px;
+}
+
+.voice-eq-bars.hidden {
+  display: none;
+}
+
+.voice-eq-bars i {
+  display: block;
+  width: 3px;
+  height: 6px;
+  border-radius: 3px;
+  background: #fff6cf;
+  transition: height 0.07s ease;
+}
+
+.heard-bubble {
+  width: 100%;
+  text-align: center;
+  padding: 5px 12px;
+  margin-bottom: 6px;
+  border-radius: 11px;
+  font-size: 12px;
+  font-weight: 800;
+  background: rgba(12, 34, 27, 0.92);
+  border: 1.3px solid rgba(251, 200, 74, 0.48);
+  color: #fff3c2;
+  animation: popInFast 0.2s ease;
+}
+
+.heard-bubble.ok {
+  background: rgba(14, 78, 52, 0.94);
+  border-color: #3ef29e;
+  color: #d6ffec;
+}
+
+.heard-bubble.bad {
+  background: rgba(102, 20, 28, 0.94);
+  border-color: #ff7b88;
+  color: #ffe2e6;
+}
+
+@keyframes popInFast {
+  from { opacity: 0; transform: translateY(4px) scale(0.96); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* 6. Ambiente Visual Dinámico por Temática */
+body[data-theme="futbol"] .wheel-halo {
+  background: radial-gradient(circle, rgba(34, 227, 150, 0.42) 0%, rgba(16, 128, 72, 0.18) 52%, rgba(0, 0, 0, 0) 75%);
+}
+body[data-theme="entretenimiento"] .wheel-halo {
+  background: radial-gradient(circle, rgba(255, 107, 120, 0.42) 0%, rgba(251, 200, 74, 0.22) 52%, rgba(0, 0, 0, 0) 75%);
+}
+body[data-theme="historia"] .wheel-halo {
+  background: radial-gradient(circle, rgba(245, 166, 35, 0.44) 0%, rgba(168, 92, 18, 0.20) 52%, rgba(0, 0, 0, 0) 75%);
+}
+body[data-theme="ciencia"] .wheel-halo {
+  background: radial-gradient(circle, rgba(72, 209, 252, 0.44) 0%, rgba(28, 106, 184, 0.22) 52%, rgba(0, 0, 0, 0) 75%);
+}
+body[data-theme="infantil"] .wheel-halo {
+  background: radial-gradient(circle, rgba(167, 139, 250, 0.45) 0%, rgba(96, 165, 250, 0.24) 52%, rgba(0, 0, 0, 0) 75%);
+}
+
+/* 7. Modal de Rango y Medallas */
+.rank-xp-track {
+  width: 100%;
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+  margin: 4px 0 12px;
+}
+
+.rank-xp-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #fbc84a, #22e396);
+  transition: width 0.35s ease;
+}
+
+.medals-grid {
+  width: 100%;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  max-height: 46vh;
+  overflow-y: auto;
+}
+
+.medal-card {
+  padding: 9px 8px;
+  border-radius: 14px;
+  background: rgba(7, 22, 18, 0.82);
+  border: 1.2px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 3px;
+  opacity: 0.5;
+  filter: grayscale(0.8);
+}
+
+.medal-card.unlocked {
+  opacity: 1;
+  filter: none;
+  background: linear-gradient(180deg, rgba(22, 62, 48, 0.92), rgba(10, 32, 25, 0.95));
+  border-color: var(--gold-bright);
+  box-shadow: 0 4px 14px rgba(251, 200, 74, 0.22);
+}
+
+.medal-icon {
+  font-size: 24px;
+  line-height: 1.1;
+}
+
+.medal-name {
+  font-size: 11.5px;
+  font-weight: 900;
+  color: var(--gold-bright);
+}
+
+.medal-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
