@@ -220,13 +220,25 @@ def build_daily_challenge(date_str: str) -> dict:
                 seen.add(f"{l}|{na}")
                 by_letter[l].append(q)
 
+    # Also include voiced questions from GLOBAL_BY_LETTER (base_pack_es) so daily Rosco has 75+ unique voiced days
+    if voiced:
+        for l in ROSCO_LETTERS:
+            for q in GLOBAL_BY_LETTER.get(l, []):
+                if sanitize_key(q.get("Id", "")) not in voiced:
+                    continue
+                na = norm_es(q.get("Answer", ""))
+                if not na or f"{l}|{na}" in seen:
+                    continue
+                seen.add(f"{l}|{na}")
+                by_letter[l].append(q)
+
     items = []
     used_answers = set()
     for l in ROSCO_LETTERS:
         pool = by_letter[l] or GLOBAL_BY_LETTER.get(l, [])
         if not pool:
             continue
-        vpool = [q for q in pool if sanitize_key(q.get("Id", "")) in voiced]
+        vpool = [q for q in pool if sanitize_key(q.get("Id", "")) in voiced] if voiced else []
         cands = vpool if vpool else pool
         cands_sorted = sorted(cands, key=lambda q: str(q.get("Id", "")))
         # Deterministic shuffle per letter + rotational index by day_ordinal -> ZERO repeats across consecutive days!
@@ -260,6 +272,13 @@ def get_voiced_keys() -> set:
         for p in VOICE_DIR.iterdir():
             if p.suffix.lower() in (".ogg", ".mp3") and p.stat().st_size > 1500:
                 keys.add(p.stem)
+    if not keys:
+        vk_file = DATA_DIR / "voiced_keys.json"
+        if vk_file.exists():
+            try:
+                keys.update(json.loads(vk_file.read_text(encoding="utf-8")))
+            except Exception:
+                pass
     return keys
 
 
