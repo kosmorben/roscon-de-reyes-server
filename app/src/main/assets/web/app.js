@@ -853,6 +853,51 @@
       inGameBtn.classList.toggle("active", bgMusicEnabled);
       inGameBtn.textContent = bgMusicEnabled ? "🎵" : "🔇";
     }
+    document.querySelectorAll(".js-music-btn").forEach(b => {
+      b.classList.toggle("active", bgMusicEnabled);
+      b.textContent = b.dataset.fullLabel
+        ? (bgMusicEnabled ? "🎵 Música: Sí" : "🔇 Música: No")
+        : (bgMusicEnabled ? "🎵" : "🔇");
+    });
+  }
+
+  const BGM_TRACK_FILES = [
+    "christmas_bgm_1.ogg",
+    "christmas_bgm_2.ogg",
+    "christmas_bgm_3.ogg",
+    "christmas_bgm_4.ogg",
+    "christmas_bgm_5.ogg"
+  ];
+  let webBgmQueue = [];
+  let webBgmCurrentIdx = -1;
+
+  function pickNextWebBgmSrc() {
+    if (webBgmQueue.length === 0) {
+      webBgmQueue = BGM_TRACK_FILES.map((_, i) => i);
+      for (let i = webBgmQueue.length - 1; i > 0; i--) {
+        const r = Math.floor(Math.random() * (i + 1));
+        [webBgmQueue[i], webBgmQueue[r]] = [webBgmQueue[r], webBgmQueue[i]];
+      }
+      if (webBgmQueue.length > 1 && webBgmQueue[0] === webBgmCurrentIdx) {
+        webBgmQueue.push(webBgmQueue.shift());
+      }
+    }
+    webBgmCurrentIdx = webBgmQueue.shift();
+    return BGM_TRACK_FILES[webBgmCurrentIdx] || "christmas_bgm.ogg";
+  }
+
+  function switchToNextMusicTrack() {
+    if (window.RosconAndroid && window.RosconAndroid.nextMusicTrack) {
+      window.RosconAndroid.nextMusicTrack();
+      return;
+    }
+    if (bgmAudio) {
+      try { bgmAudio.pause(); } catch (_) {}
+      bgmAudio = null;
+    }
+    if (bgMusicEnabled) {
+      updateMusicEngine();
+    }
   }
 
   function updateMusicEngine() {
@@ -876,18 +921,22 @@
     }
 
     if (!bgmAudio) {
-      bgmAudio = new Audio("christmas_bgm.ogg");
-      bgmAudio.loop = true;
+      bgmAudio = new Audio(pickNextWebBgmSrc());
+      bgmAudio.loop = false;
       bgmAudio.preload = "auto";
+      bgmAudio.addEventListener("ended", () => {
+        bgmAudio = null;
+        if (bgMusicEnabled) updateMusicEngine();
+      });
     }
     if (game.listening) {
-      bgmAudio.volume = 0.03;
+      bgmAudio.volume = 0.025;
     } else if (webClueSpeaking) {
-      bgmAudio.volume = 0.09;
+      bgmAudio.volume = 0.075;
     } else if (game.active) {
-      bgmAudio.volume = 0.16;
+      bgmAudio.volume = 0.14;
     } else {
-      bgmAudio.volume = 0.28;
+      bgmAudio.volume = 0.27;
     }
     if (bgmAudio.paused && !document.hidden) {
       bgmAudio.play().catch(() => {});
@@ -1131,14 +1180,20 @@
   }
 
   function pickBestFromPool(pool, targetDiff) {
-    const freshDiff = pool.filter(q => {
+    const voicedPool = pool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
+    const candidateBase = voicedPool.length > 0 ? voicedPool : pool;
+    const freshDiff = candidateBase.filter(q => {
       const d = (q.Difficulty || "facil").toLowerCase();
       return targetDiff === "dificil" ? (d === "dificil" || d === "normal") : d === "facil";
     });
-    const diffPool = freshDiff.length > 0 ? freshDiff : pool;
-    const freshVoiced = diffPool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
-    const candidates = freshVoiced.length > 0 ? freshVoiced : diffPool;
-    return candidates[Math.floor(Math.random() * candidates.length)];
+    const baseCandidates = freshDiff.length > 0 ? freshDiff : candidateBase;
+    if (targetDiff === "dificil") {
+      // En Difícil y ⚡ Súbita prioriza palabras de 6 a 11 letras (retadoras pero siempre resolubles)
+      const sweetSpot = baseCandidates.filter(q => q.Answer && q.Answer.length >= 6 && q.Answer.length <= 11);
+      const cands = sweetSpot.length > 0 ? sweetSpot : baseCandidates;
+      return cands[Math.floor(Math.random() * cands.length)];
+    }
+    return baseCandidates[Math.floor(Math.random() * baseCandidates.length)];
   }
 
   function buildRosco24() {
@@ -1155,7 +1210,7 @@
     const usedAnswersThisRosco = new Set();
     const usedCluesThisRosco = new Set();
     let lowReserve = false;
-    const targetDiff = selectedDiff === "dificil" ? "dificil" : "facil";
+    const targetDiff = (selectedDiff === "dificil" || selectedDiff === "subita") ? "dificil" : "facil";
 
     const canUse = (q) => {
       if (!q || !q.Answer || !q.Clue) return false;
@@ -1170,13 +1225,40 @@
       return true;
     };
 
+    const matchesTargetDiff = (q) => {
+      const d = (q.Difficulty || "facil").toLowerCase();
+      return targetDiff === "dificil" ? (d === "dificil" || d === "normal") : d === "facil";
+    };
+
     for (const l of ROSCO_LETTERS) {
       const themePool = byLetter[l] || [];
       let fresh = themePool.filter(canUse);
-      if (fresh.length <= 3) lowReserve = true;
+      let freshVoiced = fresh.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
+      if (freshVoiced.length <= 3) lowReserve = true;
+
+      if (freshVoiced.length > 0) {
+        fresh = freshVoiced;
+      } else {
+        // Si ya no quedan preguntas CON VOZ sin jugar en esta temática, prioriza la reserva global CON VOZ
+        // antes de recurrir a preguntas sin locución (TTS del sistema)
+        const globalPool = globalReserveByLetter[l] || [];
+        const globalVoiced = globalPool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)) && canUse(q));
+        if (globalVoiced.length > 0) {
+          fresh = globalVoiced;
+        }
+      }
+
+      // En Difícil / ⚡ Súbita, si en esta temática solo quedan fáciles para esta letra,
+      // busca primero una pregunta difícil/normal con voz en la reserva global antes de caer en fácil
+      if (targetDiff === "dificil" && !fresh.some(matchesTargetDiff)) {
+        const gHard = (globalReserveByLetter[l] || []).filter(
+          q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)) && canUse(q) && matchesTargetDiff(q)
+        );
+        if (gHard.length > 0) fresh = gHard;
+      }
 
       // Si se terminan las preguntas nuevas de esa letra en esta temática, NUNCA repite:
-      // pasa automáticamente a la reserva global de 5.800+ preguntas verificadas (priorizando locución Fenrir)
+      // pasa automáticamente a la reserva global de 5.800+ preguntas verificadas (priorizando locución)
       if (fresh.length === 0) {
         const globalPool = globalReserveByLetter[l] || [];
         const globalVoiced = globalPool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)) && canUse(q));
@@ -1184,9 +1266,11 @@
       }
 
       if (fresh.length === 0) {
-        // Caso extremo tras más de 240 roscos completos (~5.800 palabras únicas jugadas): evita repetir dentro del mismo rosco
+        // Caso extremo tras agotar las preguntas nuevas: prioriza siempre las que tienen voz oficial
         const emergencyPool = (globalReserveByLetter[l] && globalReserveByLetter[l].length > 0) ? globalReserveByLetter[l] : themePool;
-        fresh = emergencyPool.filter(q => q && !usedAnswersThisRosco.has(normalizeSpanish(q.Answer)));
+        const emNonDup = emergencyPool.filter(q => q && !usedAnswersThisRosco.has(normalizeSpanish(q.Answer)));
+        const emVoiced = emNonDup.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
+        fresh = emVoiced.length > 0 ? emVoiced : emNonDup;
       }
       if (fresh.length === 0) continue;
 
@@ -1223,6 +1307,7 @@
     const cfg = DIFF_CONFIG[selectedDiff] || DIFF_CONFIG.facil;
     const isSudden = !!cfg.suddenDeath;
     const vipBonusHints = (isVip && !isSudden) ? 2 : 0;
+    const giftWallet = consumeGiftHintsForMatch(isSudden);
     game.isOnline = false;
     game.isDaily = false;
     game.isSuddenDeath = isSudden;
@@ -1240,7 +1325,7 @@
         wrong: 0,
         streak: 0,
         bestStreak: 0,
-        hintsLeft: cfg.hints + vipBonusHints,
+        hintsLeft: cfg.hints + vipBonusHints + (i === 0 ? giftWallet.hints : 0),
         foundKing: false,
         foundHaba: false
       });
@@ -1252,13 +1337,32 @@
       revealed: q.Mode === "StartsWith" ? [0] : []
     }));
 
-    // Esconde la Figurita del Rey (premio) y el Haba (truco) bajo 2 letras aleatorias distintas
+    // Esconde los 3 Reyes Magos (Melchor, Gaspar, Baltasar) y 3 Habas bajo 6 letras distintas
+    const THREE_KINGS = [
+      { name: "Melchor",  gift: "Oro",      pts: 200 },
+      { name: "Gaspar",   gift: "Incienso", pts: 250 },
+      { name: "Baltasar", gift: "Mirra",    pts: 300 }
+    ];
+    const idxBag = Array.from({ length: game.items.length }, (_, k) => k);
+    for (let k = idxBag.length - 1; k > 0; k--) {
+      const r = Math.floor(Math.random() * (k + 1));
+      [idxBag[k], idxBag[r]] = [idxBag[r], idxBag[k]];
+    }
+    game.kings = THREE_KINGS.map((king, k) => ({
+      index: idxBag[k] ?? k,
+      name: king.name,
+      gift: king.gift,
+      pts: king.pts,
+      found: false
+    }));
+    game.habas = [0, 1, 2].map((k) => ({
+      index: idxBag[3 + k] ?? (3 + k),
+      found: false
+    }));
     game.prizeFound = false;
     game.habaFound = false;
-    game.prizeIndex = Math.floor(Math.random() * game.items.length);
-    do {
-      game.habaIndex = Math.floor(Math.random() * game.items.length);
-    } while (game.habaIndex === game.prizeIndex && game.items.length > 1);
+    game.prizeIndex = game.kings[0] ? game.kings[0].index : 0;
+    game.habaIndex = game.habas[0] ? game.habas[0].index : 1;
 
     game.currentIndex = 0;
     game.currentPlayerIndex = 0;
@@ -1271,6 +1375,7 @@
 
     document.getElementById("surpriseToast").classList.add("hidden");
     buildLetterButtons();
+    switchToNextMusicTrack();
     showScreen("screenGame");
     renderGame();
     startClock();
@@ -1348,6 +1453,11 @@
     tEl.textContent = formatTimer(game.timeRemaining);
     const urgent = game.timeLimit > 0 && game.timeRemaining <= 10;
     tEl.classList.toggle("urgent", urgent);
+    const screenGame = document.getElementById("screenGame");
+    if (screenGame) {
+      const sprint = game.active && game.timeLimit > 0 && game.timeRemaining > 0 && game.timeRemaining <= 20;
+      screenGame.classList.toggle("sprint-final", sprint);
+    }
 
     const ring = document.getElementById("timerRingProgress");
     const svg = ring ? ring.parentElement : null;
@@ -1444,6 +1554,14 @@
     maybeAutoStartMic();
   };
 
+  const SPANISH_LETTER_SPOKEN = {
+    A: "a", B: "be", C: "ce", D: "de", E: "e", F: "efe", G: "ge",
+    H: "hache", I: "i", J: "jota", K: "ka", L: "ele", M: "eme",
+    N: "ene", Ñ: "eñe", O: "o", P: "pe", Q: "cu", R: "erre",
+    S: "ese", T: "te", U: "u", V: "uve", W: "uve doble",
+    X: "equis", Y: "i griega", Z: "zeta"
+  };
+
   function speakCurrentClue(force = false) {
     if (!game.active) return;
     const item = game.items[game.currentIndex];
@@ -1452,9 +1570,10 @@
     game.lastSpokenId = item.q.Id;
 
     const letter = item.q.Letter.toUpperCase();
+    const spokenLetter = SPANISH_LETTER_SPOKEN[letter] || letter.toLowerCase();
     const intro = item.q.Mode === "Contains"
-      ? `Contiene la ${letter}. ${item.q.Clue}`
-      : `Empieza por ${letter}. ${item.q.Clue}`;
+      ? `Contiene la ${spokenLetter}. ${item.q.Clue}`
+      : `Empieza por ${spokenLetter}. ${item.q.Clue}`;
 
     if (window.RosconAndroid && window.RosconAndroid.speakClue) {
       window.RosconAndroid.speakClue(item.q.Id, intro);
@@ -1465,6 +1584,7 @@
     stopAllSpeech();
     const safeKey = sanitizeVoiceKey(item.q.Id);
     const audio = new Audio(`voice/${safeKey}.ogg`);
+    audio.playbackRate = 1.20;
     webAudioEl = audio;
     webClueSpeaking = true;
     updateMusicEngine();
@@ -1521,14 +1641,32 @@
     const resolved = game.items.length - remaining;
     document.getElementById("topProgress").textContent = `${resolved}/${game.items.length}`;
 
+    // Live 3 Reyes Magos + Habas HUD
+    const kingsHud = document.getElementById("kingsHud");
+    if (kingsHud) {
+      const kList = game.kings || [];
+      kingsHud.querySelectorAll(".king-chip").forEach(chip => {
+        const kName = chip.dataset.king;
+        const found = kList.some(k => k.name === kName && k.found);
+        chip.classList.toggle("found", found);
+      });
+      const hChip = document.getElementById("habaHudChip");
+      if (hChip) {
+        const hFound = (game.habas || []).filter(h => h.found).length;
+        hChip.textContent = `🫘 ${hFound}/3`;
+      }
+    }
+
     // 24 letras
     const dots = document.getElementById("lettersRing").children;
     for (let i = 0; i < game.items.length && i < dots.length; i++) {
       const it = game.items[i];
       let cls = "letter-dot";
+      const kingHit = (game.kings || []).some(k => k.found && k.index === i);
+      const habaHit = (game.habas || []).some(h => h.found && h.index === i);
       if (i === game.currentIndex) cls += " active";
-      else if (game.prizeFound && i === game.prizeIndex) cls += " found-king";
-      else if (game.habaFound && i === game.habaIndex) cls += " found-haba";
+      else if (kingHit || (game.prizeFound && i === game.prizeIndex)) cls += " found-king";
+      else if (habaHit || (game.habaFound && i === game.habaIndex)) cls += " found-haba";
       else if (it.status !== "pending") cls += ` ${it.status}`;
       dots[i].className = cls;
     }
@@ -1806,25 +1944,50 @@
       spawnScorePop(player.streak >= 3 ? `+${pts} 🔥×${player.streak}` : `+${pts}`);
       spawnMiniBurst(0.5, 0.30, "#ffd84d", "#25eb93");
 
-      if (game.currentIndex === game.prizeIndex && !game.prizeFound) {
-        game.prizeFound = true;
+      const kingEntry = (game.kings || []).find(k => k.index === game.currentIndex && !k.found);
+      const habaEntry = (game.habas || []).find(h => h.index === game.currentIndex && !h.found);
+      if (kingEntry || (game.currentIndex === game.prizeIndex && !game.prizeFound && !(game.kings && game.kings.length))) {
+        let bonus = 500;
+        let kingTitle = "👑 ¡FIGURITA DEL REY!";
+        let kingSub = `Encontrada en la ${item.q.Letter} (+500 PUNTOS)`;
+        if (kingEntry) {
+          kingEntry.found = true;
+          bonus = kingEntry.pts;
+          const totalKingsFound = game.kings.filter(k => k.found).length;
+          if (totalKingsFound === 3) {
+            bonus += 250;
+            kingTitle = "👑 ¡LOS 3 REYES MAGOS!";
+            kingSub = `¡${kingEntry.name} completa el Trío Real! (+${bonus} PTS)`;
+          } else {
+            kingTitle = `👑 ¡REY ${kingEntry.name.toUpperCase()}!`;
+            kingSub = `${kingEntry.gift} en la ${item.q.Letter} (+${bonus} PTS · ${totalKingsFound}/3 Reyes)`;
+          }
+        } else {
+          game.prizeFound = true;
+        }
         player.foundKing = true;
-        pts += 500;
+        player.kingsCount = (player.kingsCount || 0) + 1;
+        pts += bonus;
         player.score += pts;
         SFX.fireworks();
         triggerFireworks();
         if (window.RosconAndroid) window.RosconAndroid.vibrate(150);
-        showCeremonyOverlay("king", "👑 ¡FIGURITA DEL REY!", `Encontrada en la ${item.q.Letter} (+500 PUNTOS)`);
-        showSurpriseToast("king", `★ ¡PREMIO! ENCONTRASTE AL REY EN LA ${item.q.Letter} (+500 PTS) ★`);
-      } else if (game.currentIndex === game.habaIndex && !game.habaFound) {
-        game.habaFound = true;
-        if (isVip && !game.habaShieldUsed) {
-          game.habaShieldUsed = true;
+        showCeremonyOverlay("king", kingTitle, kingSub);
+        showSurpriseToast("king", `${kingTitle} · ${kingSub}`);
+      } else if (habaEntry || (game.currentIndex === game.habaIndex && !game.habaFound && !(game.habas && game.habas.length))) {
+        if (habaEntry) habaEntry.found = true;
+        else game.habaFound = true;
+        if (isVip) {
           player.score += pts;
           SFX.fireworks();
           showCeremonyOverlay("shield", "🛡️ ¡ESCUDO VIP!", `Tu Corona Real bloqueó el Haba en la ${item.q.Letter}`);
           showSurpriseToast("king", `🛡️ ¡Tu Escudo VIP bloqueó el Haba en la ${item.q.Letter}!`);
-        } else if (!game.habaShieldUsed && game.players.length === 1 && selectedThemeId !== "infantil") {
+        } else if (consumeFreeGiftShield()) {
+          player.score += pts;
+          SFX.fireworks();
+          showCeremonyOverlay("shield", "🎁 ¡ESCUDO DE REGALO!", `Tu Escudo Diario bloqueó el Haba en la ${item.q.Letter}`);
+          showSurpriseToast("king", `🛡️ ¡Tu Escudo del Regalo Diario bloqueó el Haba en la ${item.q.Letter}!`);
+        } else if (game.players.length === 1 && selectedThemeId !== "infantil") {
           stopClock();
           pendingHabaContext = { player, letter: item.q.Letter, passPlayerAfter: false, basePts: pts };
           document.getElementById("habaShieldModal").classList.remove("hidden");
@@ -1864,13 +2027,18 @@
       flashAnswerTiles(item.q.Answer, false);
       spawnScorePop(item.q.Answer.toUpperCase(), true);
 
-      if (game.currentIndex === game.habaIndex && !game.habaFound && !game.isSuddenDeath) {
-        game.habaFound = true;
-        if (isVip && !game.habaShieldUsed) {
-          game.habaShieldUsed = true;
+      const habaWrong = (game.habas || []).find(h => h.index === game.currentIndex && !h.found);
+      if ((habaWrong || (game.currentIndex === game.habaIndex && !game.habaFound && !(game.habas && game.habas.length))) && !game.isSuddenDeath) {
+        if (habaWrong) habaWrong.found = true;
+        else game.habaFound = true;
+        if (isVip) {
           SFX.hint();
           showCeremonyOverlay("shield", "🛡️ ¡ESCUDO VIP!", `Tu Corona Real evitó los -75 pts del Haba`);
-        } else if (!game.habaShieldUsed && game.players.length === 1 && selectedThemeId !== "infantil") {
+        } else if (consumeFreeGiftShield()) {
+          SFX.hint();
+          showCeremonyOverlay("shield", "🎁 ¡ESCUDO DE REGALO!", `Tu Escudo Diario evitó los -75 pts del Haba`);
+          showSurpriseToast("king", `🛡️ ¡Tu Escudo del Regalo Diario bloqueó el Haba en la ${item.q.Letter}!`);
+        } else if (game.players.length === 1 && selectedThemeId !== "infantil") {
           stopClock();
           pendingHabaContext = { player, letter: item.q.Letter, passPlayerAfter: true, basePts: 0 };
           document.getElementById("habaShieldModal").classList.remove("hidden");
@@ -2228,7 +2396,9 @@
     const questions = [];
     const usedDailyAns = new Set();
     for (const l of ROSCO_LETTERS) {
-      const pool = (byL[l] || []).filter(q => !usedDailyAns.has(normalizeSpanish(q.Answer)));
+      const rawPool = (byL[l] || []).filter(q => !usedDailyAns.has(normalizeSpanish(q.Answer)));
+      const voicedPool = rawPool.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
+      const pool = voicedPool.length > 0 ? voicedPool : rawPool;
       if (pool.length > 0) {
         const pick = pool[Math.floor(nextRand() * pool.length)];
         usedDailyAns.add(normalizeSpanish(pick.Answer));
@@ -2295,6 +2465,24 @@
     game.habaFound = false;
     game.prizeIndex = typeof daily.prizeIndex === "number" ? daily.prizeIndex : 0;
     game.habaIndex = typeof daily.habaIndex === "number" ? daily.habaIndex : 1;
+    const dLen = Math.max(6, game.items.length);
+    const dUsed = new Set([game.prizeIndex, game.habaIndex]);
+    const nextFree = (start) => {
+      let idx = ((start % dLen) + dLen) % dLen;
+      while (dUsed.has(idx)) idx = (idx + 1) % dLen;
+      dUsed.add(idx);
+      return idx;
+    };
+    game.kings = [
+      { index: game.prizeIndex, name: "Melchor",  gift: "Oro",      pts: 200, found: false },
+      { index: nextFree(game.prizeIndex + 7),  name: "Gaspar",   gift: "Incienso", pts: 250, found: false },
+      { index: nextFree(game.prizeIndex + 15), name: "Baltasar", gift: "Mirra",    pts: 300, found: false }
+    ];
+    game.habas = [
+      { index: game.habaIndex, found: false },
+      { index: nextFree(game.habaIndex + 8),  found: false },
+      { index: nextFree(game.habaIndex + 16), found: false }
+    ];
     game.currentIndex = 0;
     game.currentPlayerIndex = 0;
     game.timeLimit = daily.timeLimit || 180;
@@ -2306,6 +2494,7 @@
 
     document.getElementById("surpriseToast").classList.add("hidden");
     buildLetterButtons();
+    switchToNextMusicTrack();
     showScreen("screenGame");
     renderGame();
     startClock();
@@ -2667,6 +2856,7 @@
     online.version = -1;
     online.lastEventSeq = 0;
     setWaitingUi(false, "");
+    switchToNextMusicTrack();
     applyOnlineRoomState(room);
     startRoomSyncLoop();
   }
@@ -2707,6 +2897,8 @@
     game.habaIndex = room.habaIndex;
     game.prizeFound = !!room.prizeFound;
     game.habaFound = !!room.habaFound;
+    game.kings = [];
+    game.habas = [];
 
     // Procesa efectos de sonido / fuegos artificiales del ultimo evento nuevo
     const ev = room.lastEvent;
@@ -3033,6 +3225,162 @@
   }
   document.getElementById("btnMusicToggle")?.addEventListener("click", toggleBgMusic);
   document.getElementById("btnMusicInGame")?.addEventListener("click", toggleBgMusic);
+  document.querySelectorAll(".js-music-btn").forEach(b => b.addEventListener("click", toggleBgMusic));
+
+  // ⏭️ Botón Siguiente Villancico Rock
+  document.querySelectorAll(".js-next-song-btn").forEach(b => {
+    b.addEventListener("click", () => {
+      if (!bgMusicEnabled) {
+        bgMusicEnabled = true;
+        updateMusicEngine();
+      }
+      switchToNextMusicTrack();
+      SFX.hint();
+      showSurpriseToast("king", "🎸 ¡Cambiando de Villancico Rock!");
+    });
+  });
+
+  // 👴 Modo Letra Grande (Accesibilidad / Modo Abuela)
+  const LARGE_TEXT_KEY = "roscon_large_text_v1";
+  let largeTextEnabled = false;
+  try { largeTextEnabled = localStorage.getItem(LARGE_TEXT_KEY) === "1"; } catch (_) {}
+  function applyLargeTextMode() {
+    document.body.classList.toggle("large-text-mode", largeTextEnabled);
+    document.querySelectorAll(".js-large-text-btn").forEach(b => {
+      b.classList.toggle("active", largeTextEnabled);
+    });
+  }
+  applyLargeTextMode();
+  document.querySelectorAll(".js-large-text-btn").forEach(b => {
+    b.addEventListener("click", () => {
+      largeTextEnabled = !largeTextEnabled;
+      try { localStorage.setItem(LARGE_TEXT_KEY, largeTextEnabled ? "1" : "0"); } catch (_) {}
+      applyLargeTextMode();
+      SFX.hint();
+      showSurpriseToast("king", largeTextEnabled ? "👴 Modo Letra Grande activado" : "Letra tamaño normal");
+    });
+  });
+
+  // 🎁 Regalo Diario por Racha (Día 1 -> Día 7)
+  const DAILY_GIFT_KEY = "roscon_daily_gift_v1";
+  const DAILY_GIFT_REWARDS = [
+    { day: 1, icon: "💡", label: "+1 Pista", hints: 1, shields: 0 },
+    { day: 2, icon: "🛡️", label: "1 Escudo", hints: 0, shields: 1 },
+    { day: 3, icon: "💡", label: "+2 Pistas", hints: 2, shields: 0 },
+    { day: 4, icon: "🛡️", label: "1 Escudo", hints: 0, shields: 1 },
+    { day: 5, icon: "💡", label: "+2 Pistas", hints: 2, shields: 0 },
+    { day: 6, icon: "🎁", label: "1 Pista + 🛡️", hints: 1, shields: 1 },
+    { day: 7, icon: "👑", label: "+3 Pistas + 🛡️", hints: 3, shields: 1 }
+  ];
+
+  function loadDailyGiftState() {
+    try {
+      const s = JSON.parse(localStorage.getItem(DAILY_GIFT_KEY) || "{}");
+      return {
+        lastClaimDate: s.lastClaimDate || "",
+        streak: Number(s.streak) || 0,
+        bankHints: Number(s.bankHints) || 0,
+        bankShields: Number(s.bankShields) || 0
+      };
+    } catch (_) {
+      return { lastClaimDate: "", streak: 0, bankHints: 0, bankShields: 0 };
+    }
+  }
+
+  function saveDailyGiftState(s) {
+    try { localStorage.setItem(DAILY_GIFT_KEY, JSON.stringify(s)); } catch (_) {}
+  }
+
+  function consumeGiftHintsForMatch(isSudden) {
+    if (isSudden) return { hints: 0 };
+    const st = loadDailyGiftState();
+    const h = Math.min(st.bankHints || 0, 3);
+    if (h > 0) {
+      st.bankHints -= h;
+      saveDailyGiftState(st);
+    }
+    return { hints: h };
+  }
+
+  function consumeFreeGiftShield() {
+    const st = loadDailyGiftState();
+    if ((st.bankShields || 0) > 0) {
+      st.bankShields -= 1;
+      saveDailyGiftState(st);
+      return true;
+    }
+    return false;
+  }
+
+  function openDailyGiftModal() {
+    const modal = document.getElementById("dailyGiftModal");
+    if (!modal) return;
+    const today = getTodayDateStr();
+    const st = loadDailyGiftState();
+    const alreadyClaimed = st.lastClaimDate === today;
+    const yesterday = new Date(Date.parse(today + "T12:00:00Z") - 86400000).toISOString().slice(0, 10);
+    const nextDay = alreadyClaimed
+      ? Math.max(1, ((st.streak - 1) % 7) + 1)
+      : (st.lastClaimDate === yesterday ? ((st.streak % 7) + 1) : 1);
+
+    const grid = document.getElementById("dailyGiftGrid");
+    if (grid) {
+      grid.innerHTML = "";
+      for (const r of DAILY_GIFT_REWARDS) {
+        const card = document.createElement("div");
+        const isToday = r.day === nextDay;
+        const isClaimed = r.day < nextDay || (isToday && alreadyClaimed);
+        card.className = `gift-day-card${r.day === 7 ? " day7" : ""}${isToday && !alreadyClaimed ? " today" : ""}${isClaimed ? " claimed" : ""}`;
+        card.innerHTML = `
+          <div class="gift-day-num">Día ${r.day}</div>
+          <div class="gift-day-icon">${isClaimed ? "✅" : r.icon}</div>
+          <div class="gift-day-label">${r.label}</div>
+        `;
+        grid.appendChild(card);
+      }
+    }
+    const sub = document.getElementById("dailyGiftSub");
+    if (sub) {
+      sub.textContent = alreadyClaimed
+        ? `¡Ya abriste tu regalo de hoy! Tienes ${st.bankHints} pistas y ${st.bankShields} escudos guardados.`
+        : `Día ${nextDay} de racha · ¡Abre tu cofre gratis para tu próxima partida!`;
+    }
+    const claimBtn = document.getElementById("btnClaimDailyGift");
+    if (claimBtn) {
+      claimBtn.disabled = alreadyClaimed;
+      claimBtn.textContent = alreadyClaimed ? "✅ REGALO DE HOY RECOGIDO" : "¡ABRIR REGALO DE HOY! 🎁";
+    }
+    modal.classList.remove("hidden");
+  }
+
+  document.getElementById("btnOpenDailyGift")?.addEventListener("click", openDailyGiftModal);
+  document.getElementById("btnCloseDailyGift")?.addEventListener("click", () => {
+    document.getElementById("dailyGiftModal")?.classList.add("hidden");
+  });
+  document.getElementById("btnClaimDailyGift")?.addEventListener("click", () => {
+    const today = getTodayDateStr();
+    const st = loadDailyGiftState();
+    if (st.lastClaimDate === today) return;
+    const yesterday = new Date(Date.parse(today + "T12:00:00Z") - 86400000).toISOString().slice(0, 10);
+    st.streak = (st.lastClaimDate === yesterday ? st.streak : 0) + 1;
+    st.lastClaimDate = today;
+    const reward = DAILY_GIFT_REWARDS[(st.streak - 1) % 7];
+    st.bankHints += reward.hints;
+    st.bankShields += reward.shields;
+    saveDailyGiftState(st);
+    SFX.fireworks();
+    triggerFireworks();
+    document.getElementById("dailyGiftModal")?.classList.add("hidden");
+    showCeremonyOverlay("king", `🎁 ¡REGALO DÍA ${reward.day}!`, `${reward.label} añadido a tu próxima partida`);
+  });
+
+  // Muestra el cofre diario automáticamente una vez al día al abrir la app
+  setTimeout(() => {
+    const st = loadDailyGiftState();
+    if (st.lastClaimDate !== getTodayDateStr() && !game.active) {
+      openDailyGiftModal();
+    }
+  }, 1100);
 
   document.getElementById("btnDailyChallenge")?.addEventListener("click", () => {
     const meta = loadDailyMeta();

@@ -26,9 +26,14 @@
   <!-- PANTALLA 0: BIENVENIDA ALEGRE Y VISTOSA -->
   <main id="screenWelcome" class="screen screen-welcome active">
     <div class="welcome-topbar">
-      <button type="button" id="btnMusicToggle" class="top-pill">🎵 Música: Sí</button>
+      <div class="welcome-top-left">
+        <button type="button" id="btnMusicToggle" class="top-pill">🎵 Música: Sí</button>
+        <button type="button" class="top-pill js-next-song-btn" title="Siguiente Villancico Rock">⏭️</button>
+        <button type="button" class="top-pill js-large-text-btn" title="Letra Grande">A+</button>
+      </div>
       <div class="welcome-top-right">
-        <button type="button" id="btnOpenLeaderboard" class="top-pill">🏆 Ranking</button>
+        <button type="button" id="btnOpenDailyGift" class="top-pill top-pill-gold" title="Regalo Diario">🎁</button>
+        <button type="button" id="btnOpenLeaderboard" class="top-pill">🏆</button>
         <button type="button" id="btnOpenVip" class="vip-pill">👑 VIP</button>
       </div>
     </div>
@@ -65,9 +70,9 @@
       </div>
 
       <div class="welcome-surprises">
-        <span>★ Figurita del Rey <strong>+500</strong></span>
+        <span>👑 3 Reyes Magos <strong>(Melchor, Gaspar y Baltasar)</strong></span>
         <span class="welcome-dot">·</span>
-        <span>🫘 ¡Cuidado con el Haba!</span>
+        <span>🫘 3 Habas</span>
       </div>
 
       <button type="button" id="btnOpenMedals" class="rank-bar-btn">
@@ -82,6 +87,7 @@
     <div class="themes-header">
       <div class="themes-nav-row">
         <button type="button" id="btnThemesBack" class="top-pill">&larr; Inicio</button>
+        <button type="button" class="top-pill js-music-btn" title="Música de fondo">🎵</button>
         <button type="button" id="btnThemesDaily" class="top-pill top-pill-gold">Roscón del Día <img src="roscon_cake.webp" alt="" class="pill-mini-cake" /></button>
       </div>
       <div class="themes-brand">
@@ -101,6 +107,7 @@
     <div class="setup-wrap">
       <div class="setup-theme-bar">
         <button type="button" id="btnChangeTheme" class="top-pill">&larr; Temáticas</button>
+        <button type="button" class="top-pill js-music-btn" title="Música de fondo">🎵</button>
         <div id="activeThemePill" class="active-theme-pill">🎄 Especial Navidad</div>
       </div>
 
@@ -155,6 +162,7 @@
     <div class="setup-wrap">
       <div class="lobby-topbar">
         <button type="button" id="btnLobbyBack" class="top-pill">&larr; Menú</button>
+        <button type="button" class="top-pill js-music-btn" title="Música de fondo">🎵</button>
         <div id="serverStatusPill" class="server-pill">Comprobando servidor...</div>
       </div>
 
@@ -206,6 +214,13 @@
 
     <div class="game-scroll">
       <div id="onlineTurnBanner" class="turn-banner hidden">TU TURNO</div>
+
+      <div id="kingsHud" class="kings-hud" aria-label="Reyes Magos encontrados">
+        <span class="king-chip" data-king="Melchor">👑 Melchor</span>
+        <span class="king-chip" data-king="Gaspar">👑 Gaspar</span>
+        <span class="king-chip" data-king="Baltasar">👑 Baltasar</span>
+        <span id="habaHudChip" class="haba-hud-chip">🫘 0/3</span>
+      </div>
 
       <div class="wheel-stage" id="wheelStage">
         <div class="wheel-halo"></div>
@@ -260,6 +275,8 @@
           <button type="button" id="btnHint" class="btn-hint">💡 Pista (4)</button>
           <button type="button" id="btnAutoMic" class="btn-tool-pill" title="Escucha automática al terminar la locución">🎙️ Auto: No</button>
           <button type="button" id="btnMusicInGame" class="btn-tool-pill active" title="Música navideña de fondo">🎵</button>
+          <button type="button" class="btn-tool-pill js-next-song-btn" title="Siguiente Villancico Rock">⏭️</button>
+          <button type="button" class="btn-tool-pill js-large-text-btn" title="Modo Letra Grande">A+</button>
           <button type="button" id="btnToggleType" class="btn-tool-pill" title="Mostrar teclado">⌨️</button>
         </div>
       </section>
@@ -269,6 +286,9 @@
   <!-- PANTALLA 3: RESUMEN Y TARJETA COMPARTIBLE -->
   <main id="screenSummary" class="screen screen-summary">
     <div class="summary-wrap">
+      <div style="width:100%;display:flex;justify-content:flex-end;margin-bottom:6px;">
+        <button type="button" class="top-pill js-music-btn" data-full-label="1" title="Música de fondo">🎵 Música: Sí</button>
+      </div>
       <div id="summaryBadge" class="pill-badge">FIN DE LA PARTIDA</div>
       <h2 id="summaryTitle" class="summary-title">Resumen</h2>
       <p id="summarySubtitle" class="summary-subtitle"></p>
@@ -324,7 +344,7 @@
 
       <ul class="vip-perks">
         <li>✨ <strong>+2 Pistas de letra extra</strong> al empezar cada partida</li>
-        <li>🛡️ <strong>1 Escudo Real Anti-Haba automático</strong> en cada rosco</li>
+        <li>🛡️ <strong>Escudo Real Anti-Haba automático</strong> contra las 3 Habas en cada rosco</li>
         <li>👑 <strong>Insignia Dorada VIP</strong> en el Ranking Mundial y Online 1 vs 1</li>
         <li>🚫 <strong>Cero anuncios</strong> para siempre</li>
       </ul>
@@ -361,6 +381,19 @@
       <p id="medalsRankSub" class="modal-sub">0 aciertos totales · Récord Súbita: 0</p>
       <div class="rank-xp-track"><div id="rankXpFill" class="rank-xp-fill"></div></div>
       <div id="medalsGrid" class="medals-grid"></div>
+    </div>
+  </div>
+
+  <!-- MODAL: REGALO DIARIO POR RACHA (DÍA 1 - DÍA 7) -->
+  <div id="dailyGiftModal" class="modal-backdrop hidden">
+    <div class="modal-panel gift-panel">
+      <button type="button" id="btnCloseDailyGift" class="modal-close">&times;</button>
+      <div class="pill-badge">RACHA NAVIDEÑA</div>
+      <div class="vip-big-crown">🎁</div>
+      <h3 class="modal-heading">REGALO DIARIO</h3>
+      <p id="dailyGiftSub" class="modal-sub">Vuelve cada día para sumar pistas y escudos gratis</p>
+      <div id="dailyGiftGrid" class="gift-days-grid"></div>
+      <button type="button" id="btnClaimDailyGift" class="cta-gold">¡ABRIR REGALO DE HOY! 🎁</button>
     </div>
   </div>
 
