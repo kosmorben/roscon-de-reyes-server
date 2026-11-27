@@ -3240,27 +3240,6 @@
     });
   });
 
-  // 👴 Modo Letra Grande (Accesibilidad / Modo Abuela)
-  const LARGE_TEXT_KEY = "roscon_large_text_v1";
-  let largeTextEnabled = false;
-  try { largeTextEnabled = localStorage.getItem(LARGE_TEXT_KEY) === "1"; } catch (_) {}
-  function applyLargeTextMode() {
-    document.body.classList.toggle("large-text-mode", largeTextEnabled);
-    document.querySelectorAll(".js-large-text-btn").forEach(b => {
-      b.classList.toggle("active", largeTextEnabled);
-    });
-  }
-  applyLargeTextMode();
-  document.querySelectorAll(".js-large-text-btn").forEach(b => {
-    b.addEventListener("click", () => {
-      largeTextEnabled = !largeTextEnabled;
-      try { localStorage.setItem(LARGE_TEXT_KEY, largeTextEnabled ? "1" : "0"); } catch (_) {}
-      applyLargeTextMode();
-      SFX.hint();
-      showSurpriseToast("king", largeTextEnabled ? "👴 Modo Letra Grande activado" : "Letra tamaño normal");
-    });
-  });
-
   // 🎁 Regalo Diario por Racha (Día 1 -> Día 7)
   const DAILY_GIFT_KEY = "roscon_daily_gift_v1";
   const DAILY_GIFT_REWARDS = [

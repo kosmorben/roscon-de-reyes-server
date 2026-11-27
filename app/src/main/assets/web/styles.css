@@ -2207,44 +2207,6 @@ body[data-theme="infantil"] .wheel-halo {
   50% { opacity: 1; }
 }
 
-/* Modo Letra Grande (Accesibilidad / Modo Abuela) */
-body.large-text-mode .clue-text {
-  font-size: 20px !important;
-  line-height: 1.32 !important;
-}
-
-body.large-text-mode .clue-text.compact {
-  font-size: 18px !important;
-}
-
-body.large-text-mode .word-slot {
-  width: 30px;
-  height: 36px;
-  font-size: 19px;
-}
-
-body.large-text-mode .word-slot.compact {
-  width: 24px;
-  height: 32px;
-  font-size: 15.5px;
-}
-
-body.large-text-mode .word-meta,
-body.large-text-mode .mode-pill {
-  font-size: 13px;
-}
-
-body.large-text-mode .btn-voice {
-  font-size: 16px;
-  padding: 13px 16px;
-}
-
-.js-large-text-btn.active {
-  background: linear-gradient(135deg, #ffe078, #f5b324) !important;
-  color: #161108 !important;
-  border-color: #fff2b2 !important;
-}
-
 /* Modal Regalo Diario */
 .gift-days-grid {
   width: 100%;
