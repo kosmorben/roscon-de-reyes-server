@@ -1337,32 +1337,29 @@
       revealed: q.Mode === "StartsWith" ? [0] : []
     }));
 
-    // Esconde los 3 Reyes Magos (Melchor, Gaspar, Baltasar) y 3 Habas bajo 6 letras distintas
-    const THREE_KINGS = [
-      { name: "Melchor",  gift: "Oro",      pts: 200 },
-      { name: "Gaspar",   gift: "Incienso", pts: 250 },
-      { name: "Baltasar", gift: "Mirra",    pts: 300 }
-    ];
+    // Esconde 1 Rey Mago y 1 Haba bajo 2 letras distintas (tradición clásica del Roscón)
     const idxBag = Array.from({ length: game.items.length }, (_, k) => k);
     for (let k = idxBag.length - 1; k > 0; k--) {
       const r = Math.floor(Math.random() * (k + 1));
       [idxBag[k], idxBag[r]] = [idxBag[r], idxBag[k]];
     }
-    game.kings = THREE_KINGS.map((king, k) => ({
-      index: idxBag[k] ?? k,
-      name: king.name,
-      gift: king.gift,
-      pts: king.pts,
+    game.kings = [{
+      index: idxBag[0] ?? 0,
+      name: "Rey",
+      gift: "Corona",
+      pts: 500,
       found: false
-    }));
-    game.habas = [0, 1, 2].map((k) => ({
-      index: idxBag[3 + k] ?? (3 + k),
+    }];
+    game.habas = [{
+      index: idxBag[1] ?? 1,
       found: false
-    }));
+    }];
     game.prizeFound = false;
     game.habaFound = false;
-    game.prizeIndex = game.kings[0] ? game.kings[0].index : 0;
-    game.habaIndex = game.habas[0] ? game.habas[0].index : 1;
+    game.prizeIndex = game.kings[0].index;
+    game.habaIndex = game.habas[0].index;
+    game.vipRetriesLeft = isVip ? 2 : 0;
+    pendingWrongContext = null;
 
     game.currentIndex = 0;
     game.currentPlayerIndex = 0;
@@ -1641,19 +1638,19 @@
     const resolved = game.items.length - remaining;
     document.getElementById("topProgress").textContent = `${resolved}/${game.items.length}`;
 
-    // Live 3 Reyes Magos + Habas HUD
+    // Live 1 Rey + 1 Haba HUD
     const kingsHud = document.getElementById("kingsHud");
     if (kingsHud) {
-      const kList = game.kings || [];
+      const kFound = (game.kings || []).some(k => k.found) || !!game.prizeFound;
       kingsHud.querySelectorAll(".king-chip").forEach(chip => {
-        const kName = chip.dataset.king;
-        const found = kList.some(k => k.name === kName && k.found);
-        chip.classList.toggle("found", found);
+        chip.classList.toggle("found", kFound);
+        chip.textContent = kFound ? "👑 Rey 1/1" : "👑 Rey 0/1";
       });
       const hChip = document.getElementById("habaHudChip");
       if (hChip) {
-        const hFound = (game.habas || []).filter(h => h.found).length;
-        hChip.textContent = `🫘 ${hFound}/3`;
+        const hFound = (game.habas || []).some(h => h.found) || !!game.habaFound;
+        hChip.classList.toggle("found", hFound);
+        hChip.textContent = hFound ? "🫘 Haba 1/1" : "🫘 Haba 0/1";
       }
     }
 
@@ -1890,6 +1887,116 @@
     advanceTurn(true);
   }
 
+  let pendingWrongContext = null;
+
+  function pickReplacementQuestionForLetter(letter, excludeAnswer) {
+    const L = String(letter || "").toUpperCase();
+    const usedNow = new Set(game.items.map(it => normalizeSpanish(it.q.Answer)));
+    if (excludeAnswer) usedNow.add(normalizeSpanish(excludeAnswer));
+    const themeMatches = allQuestions.filter(q => q && q.Letter === L && !usedNow.has(normalizeSpanish(q.Answer)));
+    const globalMatches = (globalReserveByLetter[L] || []).filter(q => q && !usedNow.has(normalizeSpanish(q.Answer)));
+    const combined = [...themeMatches, ...globalMatches];
+    const freshVoiced = combined.filter(q => !isQuestionPlayed(q) && bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
+    const anyVoiced = combined.filter(q => bundledVoiceKeys.has(sanitizeVoiceKey(q.Id)));
+    const pool = freshVoiced.length > 0 ? freshVoiced : (anyVoiced.length > 0 ? anyVoiced : combined);
+    if (pool.length === 0) return null;
+    const pick = pool[Math.floor(Math.random() * pool.length)];
+    markQuestionPlayed(pick);
+    savePlayedHistory();
+    return pick;
+  }
+
+  function openSecondChanceModal(item, player) {
+    stopClock();
+    stopAllSpeech();
+    pendingWrongContext = { item, player, idx: game.currentIndex };
+    const L = item.q.Letter.toUpperCase();
+    const titleEl = document.getElementById("secondChanceTitle");
+    const subEl = document.getElementById("secondChanceSub");
+    const btnSame = document.getElementById("btnRetrySameAd");
+    const btnSwap = document.getElementById("btnRetrySwapAd");
+    if (titleEl) titleEl.textContent = `❌ FALLO EN LA ${L} · ¿OTRA OPORTUNIDAD?`;
+    if (isVip) {
+      if (subEl) subEl.textContent = `Ventaja Corona Real VIP (${game.vipRetriesLeft} gratis en este rosco):`;
+      if (btnSame) btnSame.textContent = `👑 Repetir esta misma pregunta (Gratis VIP)`;
+      if (btnSwap) btnSwap.textContent = `👑 Cambiar por otra pregunta de la ${L} (Gratis VIP)`;
+    } else {
+      if (subEl) subEl.textContent = `Salva la letra ${L} viendo un anuncio corto:`;
+      if (btnSame) btnSame.textContent = `🎬 Repetir esta misma pregunta`;
+      if (btnSwap) btnSwap.textContent = `🎬 Cambiar por otra pregunta de la ${L}`;
+    }
+    document.getElementById("secondChanceModal")?.classList.remove("hidden");
+  }
+
+  function finalizeWrongChoice(mode) {
+    const ctx = pendingWrongContext;
+    pendingWrongContext = null;
+    document.getElementById("secondChanceModal")?.classList.add("hidden");
+    if (!ctx || !game.active) return;
+
+    const { item, player } = ctx;
+    if (mode === "retry_same" || mode === "retry_swap") {
+      if (isVip && game.vipRetriesLeft > 0) game.vipRetriesLeft--;
+      if (mode === "retry_swap") {
+        const replacement = pickReplacementQuestionForLetter(item.q.Letter, item.q.Answer);
+        if (replacement) {
+          item.q = replacement;
+          item.revealed = replacement.Mode === "StartsWith" ? [0] : [];
+          showSurpriseToast("king", `🔄 ¡Nueva pregunta para la letra ${item.q.Letter}!`);
+        } else {
+          showSurpriseToast("king", `🔄 ¡Segunda oportunidad en la letra ${item.q.Letter}!`);
+        }
+      } else {
+        showSurpriseToast("king", `🔄 ¡Segunda oportunidad en la letra ${item.q.Letter}!`);
+      }
+      item.status = "pending";
+      player.wrong = Math.max(0, player.wrong - 1);
+      game.lastSpokenId = "";
+      SFX.fireworks();
+      renderGame();
+      if (game.timeLimit > 0) startClock();
+      speakCurrentClue(true);
+      return;
+    }
+
+    // mode === "accept": reveal answer, check Haba, and advance turn
+    flashAnswerTiles(item.q.Answer, false);
+    spawnScorePop(item.q.Answer.toUpperCase(), true);
+
+    const habaWrong = (game.habas || []).find(h => h.index === game.currentIndex && !h.found);
+    if ((habaWrong || (game.currentIndex === game.habaIndex && !game.habaFound && !(game.habas && game.habas.length))) && !game.isSuddenDeath) {
+      if (habaWrong) habaWrong.found = true;
+      else game.habaFound = true;
+      if (isVip) {
+        SFX.hint();
+        showCeremonyOverlay("shield", "🛡️ ¡ESCUDO VIP!", `Tu Corona Real evitó los -75 pts del Haba`);
+      } else if (consumeFreeGiftShield()) {
+        SFX.hint();
+        showCeremonyOverlay("shield", "🎁 ¡ESCUDO DE REGALO!", `Tu Escudo Diario evitó los -75 pts del Haba`);
+        showSurpriseToast("king", `🛡️ ¡Tu Escudo del Regalo Diario bloqueó el Haba en la ${item.q.Letter}!`);
+      } else if (game.players.length === 1 && selectedThemeId !== "infantil") {
+        pendingHabaContext = { player, letter: item.q.Letter, passPlayerAfter: true, basePts: 0 };
+        document.getElementById("habaShieldModal").classList.remove("hidden");
+        return;
+      } else {
+        player.foundHaba = true;
+        player.score = Math.max(0, player.score - 75);
+        SFX.haba();
+        if (window.RosconAndroid) window.RosconAndroid.vibrate(180);
+        showCeremonyOverlay("haba", `🫘 ¡EL HABA EN LA ${item.q.Letter}!`, "Pagas el Roscón (-75 PUNTOS)");
+        showSurpriseToast("haba", `¡TE TOCÓ EL HABA EN LA ${item.q.Letter}! Pagas el Roscón (-75 pts)`);
+      }
+    }
+
+    if (game.timeLimit > 0) startClock();
+    game.revealing = true;
+    updateVoiceButton();
+    setTimeout(() => {
+      game.revealing = false;
+      if (game.active) advanceTurn(true);
+    }, 1050);
+  }
+
   function finalizeHabaChoice(shielded) {
     const ctx = pendingHabaContext;
     pendingHabaContext = null;
@@ -1952,19 +2059,9 @@
         let kingSub = `Encontrada en la ${item.q.Letter} (+500 PUNTOS)`;
         if (kingEntry) {
           kingEntry.found = true;
-          bonus = kingEntry.pts;
-          const totalKingsFound = game.kings.filter(k => k.found).length;
-          if (totalKingsFound === 3) {
-            bonus += 250;
-            kingTitle = "👑 ¡LOS 3 REYES MAGOS!";
-            kingSub = `¡${kingEntry.name} completa el Trío Real! (+${bonus} PTS)`;
-          } else {
-            kingTitle = `👑 ¡REY ${kingEntry.name.toUpperCase()}!`;
-            kingSub = `${kingEntry.gift} en la ${item.q.Letter} (+${bonus} PTS · ${totalKingsFound}/3 Reyes)`;
-          }
-        } else {
-          game.prizeFound = true;
+          bonus = kingEntry.pts || 500;
         }
+        game.prizeFound = true;
         player.foundKing = true;
         player.kingsCount = (player.kingsCount || 0) + 1;
         pts += bonus;
@@ -2024,6 +2121,21 @@
       card.classList.remove("shake");
       void card.offsetWidth;
       card.classList.add("shake");
+
+      const canOfferSecondChance =
+        game.players.length === 1 &&
+        !game.isOnline &&
+        !game.isSuddenDeath &&
+        selectedThemeId !== "infantil" &&
+        (!isVip || (game.vipRetriesLeft || 0) > 0);
+
+      if (canOfferSecondChance) {
+        SFX.wrong();
+        if (window.RosconAndroid) window.RosconAndroid.vibrate(70);
+        openSecondChanceModal(item, player);
+        return;
+      }
+
       flashAnswerTiles(item.q.Answer, false);
       spawnScorePop(item.q.Answer.toUpperCase(), true);
 
@@ -2465,24 +2577,10 @@
     game.habaFound = false;
     game.prizeIndex = typeof daily.prizeIndex === "number" ? daily.prizeIndex : 0;
     game.habaIndex = typeof daily.habaIndex === "number" ? daily.habaIndex : 1;
-    const dLen = Math.max(6, game.items.length);
-    const dUsed = new Set([game.prizeIndex, game.habaIndex]);
-    const nextFree = (start) => {
-      let idx = ((start % dLen) + dLen) % dLen;
-      while (dUsed.has(idx)) idx = (idx + 1) % dLen;
-      dUsed.add(idx);
-      return idx;
-    };
-    game.kings = [
-      { index: game.prizeIndex, name: "Melchor",  gift: "Oro",      pts: 200, found: false },
-      { index: nextFree(game.prizeIndex + 7),  name: "Gaspar",   gift: "Incienso", pts: 250, found: false },
-      { index: nextFree(game.prizeIndex + 15), name: "Baltasar", gift: "Mirra",    pts: 300, found: false }
-    ];
-    game.habas = [
-      { index: game.habaIndex, found: false },
-      { index: nextFree(game.habaIndex + 8),  found: false },
-      { index: nextFree(game.habaIndex + 16), found: false }
-    ];
+    game.kings = [{ index: game.prizeIndex, name: "Rey", gift: "Corona", pts: 500, found: false }];
+    game.habas = [{ index: game.habaIndex, found: false }];
+    game.vipRetriesLeft = isVip ? 2 : 0;
+    pendingWrongContext = null;
     game.currentIndex = 0;
     game.currentPlayerIndex = 0;
     game.timeLimit = daily.timeLimit || 180;
@@ -3141,6 +3239,10 @@
       finalizeHabaChoice(true);
       return;
     }
+    if (kind === "retry_same" || kind === "retry_swap") {
+      finalizeWrongChoice(kind);
+      return;
+    }
     if (game.active && game.players[game.currentPlayerIndex]) {
       game.players[game.currentPlayerIndex].hintsLeft += 2;
       SFX.fireworks();
@@ -3410,6 +3512,24 @@
   });
   document.getElementById("btnAcceptHaba")?.addEventListener("click", () => {
     finalizeHabaChoice(false);
+  });
+
+  document.getElementById("btnRetrySameAd")?.addEventListener("click", () => {
+    if (isVip) {
+      finalizeWrongChoice("retry_same");
+    } else {
+      requestRewardedLifeline("retry_same");
+    }
+  });
+  document.getElementById("btnRetrySwapAd")?.addEventListener("click", () => {
+    if (isVip) {
+      finalizeWrongChoice("retry_swap");
+    } else {
+      requestRewardedLifeline("retry_swap");
+    }
+  });
+  document.getElementById("btnAcceptWrong")?.addEventListener("click", () => {
+    finalizeWrongChoice("accept");
   });
 
   document.getElementById("btnShareVictory")?.addEventListener("click", shareVictoryCard);

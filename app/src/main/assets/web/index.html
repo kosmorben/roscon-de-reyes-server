@@ -214,11 +214,9 @@
     <div class="game-scroll">
       <div id="onlineTurnBanner" class="turn-banner hidden">TU TURNO</div>
 
-      <div id="kingsHud" class="kings-hud" aria-label="Reyes Magos encontrados">
-        <span class="king-chip" data-king="Melchor">👑 Melchor</span>
-        <span class="king-chip" data-king="Gaspar">👑 Gaspar</span>
-        <span class="king-chip" data-king="Baltasar">👑 Baltasar</span>
-        <span id="habaHudChip" class="haba-hud-chip">🫘 0/3</span>
+      <div id="kingsHud" class="kings-hud" aria-label="Rey y Haba del Roscón">
+        <span class="king-chip" data-king="Rey">👑 Rey 0/1</span>
+        <span id="habaHudChip" class="haba-hud-chip">🫘 Haba 0/1</span>
       </div>
 
       <div class="wheel-stage" id="wheelStage">
@@ -342,7 +340,8 @@
 
       <ul class="vip-perks">
         <li>✨ <strong>+2 Pistas de letra extra</strong> al empezar cada partida</li>
-        <li>🛡️ <strong>Escudo Real Anti-Haba automático</strong> contra las 3 Habas en cada rosco</li>
+        <li>🔄 <strong>2 Segundas Oportunidades gratis</strong> por rosco sin ver anuncios</li>
+        <li>🛡️ <strong>Escudo Real Anti-Haba automático</strong> contra el Haba en cada rosco</li>
         <li>👑 <strong>Insignia Dorada VIP</strong> en el Ranking Mundial y Online 1 vs 1</li>
         <li>🚫 <strong>Cero anuncios</strong> para siempre</li>
       </ul>
@@ -366,6 +365,24 @@
       </button>
       <button type="button" id="btnAcceptHaba" class="btn-secondary full-btn" style="margin-top:8px;">
         Aceptar el Haba (-75 pts)
+      </button>
+    </div>
+  </div>
+
+  <!-- MODAL: SEGUNDA OPORTUNIDAD TRAS FALLO (ANUNCIO PREMIADO O VIP) -->
+  <div id="secondChanceModal" class="modal-backdrop hidden">
+    <div class="modal-panel second-chance-panel">
+      <div class="vip-big-crown">🔄</div>
+      <h3 id="secondChanceTitle" class="modal-heading">¡CASI! ¿OTRA OPORTUNIDAD?</h3>
+      <p id="secondChanceSub" class="modal-sub">Salva esta letra viendo un anuncio corto:</p>
+      <button type="button" id="btnRetrySameAd" class="cta-reward-video">
+        🎬 Repetir esta misma pregunta
+      </button>
+      <button type="button" id="btnRetrySwapAd" class="cta-reward-video cta-reward-alt" style="margin-top:8px;">
+        🎬 Cambiar por otra pregunta de esta letra
+      </button>
+      <button type="button" id="btnAcceptWrong" class="btn-secondary full-btn" style="margin-top:8px;">
+        Seguir jugando (ver respuesta)
       </button>
     </div>
   </div>

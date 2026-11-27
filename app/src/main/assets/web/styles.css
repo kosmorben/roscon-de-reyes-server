@@ -2207,6 +2207,19 @@ body[data-theme="infantil"] .wheel-halo {
   50% { opacity: 1; }
 }
 
+.haba-hud-chip.found {
+  background: linear-gradient(135deg, rgba(255, 86, 118, 0.34), rgba(178, 24, 58, 0.36));
+  border-color: rgba(255, 130, 152, 0.9);
+  color: #ffe2e8;
+  box-shadow: 0 0 10px rgba(255, 86, 118, 0.35);
+}
+
+.cta-reward-alt {
+  background: linear-gradient(135deg, #2b7fff, #6a5cff) !important;
+  color: #ffffff !important;
+  box-shadow: 0 6px 18px rgba(43, 127, 255, 0.35) !important;
+}
+
 /* Modal Regalo Diario */
 .gift-days-grid {
   width: 100%;
